@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+
+  <title>음운대좀비</title>
+
+  <link
+    rel="stylesheet"
+    href="style.css?v=135"
+  >
+</head>
+
+
+<body>
+
+  <img
+    class="page-brand-logo"
+    src="images/ui/logo_game.png"
+    alt="음운대좀비"
+    draggable="false"
+  >
+
+
+  <!-- ======================================
+       상태창
+       ====================================== -->
+
+  <div class="status-bar" aria-label="게임 상태">
+
+    <div class="hud-slot hud-seed">
+      <img class="hud-frame" src="images/ui/hud/hud_seed.png" alt="" draggable="false">
+      <strong id="energy" class="hud-value">350</strong>
+    </div>
+
+    <div class="hud-slot hud-wave">
+      <img class="hud-frame" src="images/ui/hud/hud_wave.png" alt="" draggable="false">
+      <strong id="wave" class="hud-value">1</strong>
+    </div>
+
+    <div class="hud-slot hud-life">
+      <img class="hud-frame" src="images/ui/hud/hud_life.png" alt="" draggable="false">
+      <strong id="life" class="hud-value">5</strong>
+    </div>
+
+    <div class="hud-slot hud-score">
+      <img class="hud-frame" src="images/ui/hud/hud_score.png" alt="" draggable="false">
+      <strong id="score" class="hud-value">0</strong>
+    </div>
+
+  </div>
+
+
+  <button
+    id="restart-button"
+    style="display:none;"
+  >
+    다시 시작
+  </button>
+
+
+  <!-- ======================================
+       식물 메뉴
+       ====================================== -->
+
+  <div class="plant-menu">
+
+
+    <!-- ====================================
+         소리꽃
+         ==================================== -->
+
+    <div class="plant-group energy-group">
+
+      <div class="plant-group-title">
+        ⚡ 소리꽃
+      </div>
+
+
+      <div class="plant-group-buttons">
+
+        <button
+          class="plant-button"
+          data-plant="에너지식물"
+          data-cost="40"
+        >
+          소리꽃
+          <br>
+          <small>
+            ⚡ 생산 · 40
+          </small>
+        </button>
+
+      </div>
+
+    </div>
+
+
+
+    <!-- ====================================
+         자음 공격 식물
+         ==================================== -->
+
+    <div class="plant-group consonant-group">
+
+      <div class="plant-group-title">
+        🔵 자음 - 공격
+      </div>
+
+
+      <div class="plant-group-buttons">
+
+
+        <!-- 양순음 -->
+
+        <button
+          class="plant-button"
+          data-plant="양순음"
+          data-cost="50"
+        >
+          양순음
+          <br>
+          <small>
+            ⚡ 속사 · 50
+          </small>
+        </button>
+
+
+        <!-- 치조음 -->
+
+        <button
+          class="plant-button"
+          data-plant="치조음"
+          data-cost="75"
+        >
+          치조음
+          <br>
+          <small>
+            ⚔ 균형 · 75
+          </small>
+        </button>
+
+
+        <!-- 비음 -->
+
+        <button
+          class="plant-button"
+          data-plant="비음"
+          data-cost="90"
+        >
+          비음
+          <br>
+          <small>
+            💥 3점사 · 90
+          </small>
+        </button>
+
+
+        <!-- 파열음 -->
+
+        <button
+          class="plant-button"
+          data-plant="파열음"
+          data-cost="150"
+        >
+          파열음
+          <br>
+          <small>
+            💣 중포 · 150
+          </small>
+        </button>
+
+
+        <!-- 유음 -->
+
+        <button
+          class="plant-button"
+          data-plant="유음"
+          data-cost="135"
+        >
+          유음
+          <br>
+          <small>
+            ⚡ 연쇄 · 135
+          </small>
+        </button>
+
+
+        <!-- 마찰음 -->
+
+        <button
+          class="plant-button"
+          data-plant="마찰음"
+          data-cost="120"
+        >
+          마찰음
+          <br>
+          <small>
+            🔥 지속 피해 · 120
+          </small>
+        </button>
+
+
+        <!-- 연구개음 -->
+
+        <button
+          class="plant-button"
+          data-plant="연구개음"
+          data-cost="145"
+        >
+          연구개음
+          <br>
+          <small>
+            ➠ 관통 · 145
+          </small>
+        </button>
+
+
+        <!-- 파찰음 -->
+
+        <button
+          class="plant-button"
+          data-plant="파찰음"
+          data-cost="155"
+        >
+          파찰음
+          <br>
+          <small>
+            💥 처치 폭발 · 155
+          </small>
+        </button>
+
+
+        <!-- 경구개음 -->
+
+        <button
+          class="plant-button"
+          data-plant="경구개음"
+          data-cost="145"
+        >
+          경구개음
+          <br>
+          <small>
+            ✦ 연속 제압 · 145
+          </small>
+        </button>
+
+
+        <!-- 후음 -->
+
+        <button
+          class="plant-button"
+          data-plant="후음"
+          data-cost="165"
+        >
+          후음
+          <br>
+          <small>
+            🎯 저격 · 165
+          </small>
+        </button>
+
+
+      </div>
+
+    </div>
+
+
+
+    <!-- ====================================
+         모음 지원 식물
+         ==================================== -->
+
+    <div class="plant-group vowel-group">
+
+      <div class="plant-group-title">
+        🟠 모음 - 지원
+      </div>
+
+
+      <div class="plant-group-buttons">
+
+
+        <!-- 평순모음 -->
+
+        <button
+          class="plant-button"
+          data-plant="평순모음"
+          data-cost="110"
+        >
+          평순모음
+          <br>
+          <small>
+            🧱 탱커 · 110
+          </small>
+        </button>
+
+
+        <!-- 고모음 -->
+
+        <button
+          class="plant-button"
+          data-plant="고모음"
+          data-cost="90"
+        >
+          고모음
+          <br>
+          <small>
+            ⏩ 공속 증가 · 90
+          </small>
+        </button>
+
+
+        <!-- 중모음 -->
+
+        <button
+          class="plant-button"
+          data-plant="중모음"
+          data-cost="100"
+        >
+          중모음
+          <br>
+          <small>
+            💚 회복 · 100
+          </small>
+        </button>
+
+
+        <!-- 원순모음 -->
+
+        <button
+          class="plant-button"
+          data-plant="원순모음"
+          data-cost="125"
+        >
+          원순모음
+          <br>
+          <small>
+            🛡 보호막 · 125
+          </small>
+        </button>
+
+
+        <!-- 저모음 -->
+
+        <button
+          class="plant-button"
+          data-plant="저모음"
+          data-cost="130"
+        >
+          저모음
+          <br>
+          <small>
+            🧊 레인 정지 · 130
+          </small>
+        </button>
+
+
+        <!-- 후설모음 -->
+
+        <button
+          class="plant-button"
+          data-plant="후설모음"
+          data-cost="200"
+        >
+          후설모음
+          <br>
+          <small>
+            🐌 전장 둔화 · 200
+          </small>
+        </button>
+
+
+        <!-- 전설모음 -->
+
+        <button
+          class="plant-button"
+          data-plant="전설모음"
+          data-cost="230"
+        >
+          전설모음
+          <br>
+          <small>
+            ❄ 전장 정지 · 230
+          </small>
+        </button>
+
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- ======================================
+       식물 정보창
+       ====================================== -->
+
+  <div
+    id="plant-info"
+    class="plant-info plant-info-bottom"
+  >
+
+    <strong>
+      선택 정보
+    </strong>
+
+    <div id="plant-info-content">
+      식물을 선택하면 역할과 효과가 표시됩니다.
+    </div>
+
+  </div>
+
+
+  <!-- ======================================
+       도구
+       ====================================== -->
+
+  <div class="tool-menu">
+
+    <button id="remove-button">
+
+      🪏 식물 제거
+
+      <small>
+        구매가의 30% 환불
+      </small>
+
+    </button>
+
+  </div>
+
+
+  <!-- ======================================
+       튜토리얼 안내창
+       ====================================== -->
+
+  <div
+    id="tutorial-guide"
+    class="tutorial-guide hidden"
+  >
+
+    <div id="tutorial-guide-title">
+      📘 튜토리얼
+    </div>
+
+    <div id="tutorial-guide-text">
+    </div>
+
+  </div>
+
+
+  <!-- ======================================
+       게임판
+       ====================================== -->
+
+  <div class="game-board"></div>
+
+
+  <!-- ======================================
+       시작 화면
+       ====================================== -->
+
+  <div
+    id="start-overlay"
+    class="unlock-overlay"
+  >
+
+    <div class="unlock-card">
+
+      <img
+        class="start-brand-logo"
+        src="images/ui/logo_game.png"
+        alt="음운대좀비"
+        draggable="false"
+      >
+
+      <p class="start-tagline">
+        학교를 습격하는 좀비들을 식물들로 막아내세요!<br>
+        소리를 읽고! 식물을 심고! 좀비를 막아라!
+      </p>
+
+      <p class="start-hint">
+        처음이라면 튜토리얼부터 시작해보세요.
+      </p>
+
+
+      <div class="start-buttons">
+
+        <button id="tutorial-start-button">
+          📘 튜토리얼 시작
+        </button>
+
+        <button id="direct-start-button">
+          ⚔ 바로 게임 시작
+        </button>
+
+        <button id="raid-test-button" class="hidden" hidden aria-hidden="true">
+          🧪 RAID 테스트
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- ======================================
+       Wave / 해금 팝업
+       ====================================== -->
+
+  <div
+    id="unlock-overlay"
+    class="unlock-overlay hidden"
+  >
+
+    <div class="unlock-card">
+
+      <h2 id="unlock-title">
+        새로운 식물!
+      </h2>
+
+      <div id="unlock-content"></div>
+
+      <button id="unlock-next-button">
+        다음 Wave 시작
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <script src="data.js?v=2"></script>
+  <script src="game.js?v=133"></script>
+
+</body>
+
+</html>
