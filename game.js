@@ -5,6 +5,9 @@
 // 특수 적 4종 + Wave 9 Final + RAID 통합 버전 / v23 전투 리액션 강화
 // ============================================
 
+const GAME_VERSION = "v0.9.0";
+const GAME_AUTHOR = "정희재";
+
 const CELL_SIZE = 90;
 const BOARD_COLUMNS = 11;
 const BOARD_ROWS = 5;
@@ -611,6 +614,11 @@ const raidTestButton = document.querySelector("#raid-test-button");
 const tutorialGuide = document.querySelector("#tutorial-guide");
 const tutorialGuideText = document.querySelector("#tutorial-guide-text");
 
+const startCredit = document.querySelector("#start-credit");
+if(startCredit){
+  startCredit.textContent = `${GAME_VERSION} · 만든 이 ${GAME_AUTHOR}`;
+}
+
 let selectedPlant = null;
 let selectedCost = 0;
 let removeMode = false;
@@ -880,6 +888,95 @@ function placePlantInfoBelowBoard(){
     main.appendChild(plantInfo);
   }else if(plantInfo.previousElementSibling!==center){
     center.insertAdjacentElement("afterend",plantInfo);
+  }
+
+  scheduleGameFitScale();
+}
+
+/* =========================================================
+   Viewport fit scale — 디자인 기준 크기를 유지한 채 전체 축소
+   ========================================================= */
+
+const GAME_FIT={
+  baseWidth:0,
+  baseHeight:0,
+  scale:1,
+  raf:0,
+  resizeBound:false
+};
+
+function scheduleGameFitScale(){
+  if(GAME_FIT.raf) cancelAnimationFrame(GAME_FIT.raf);
+  GAME_FIT.raf=requestAnimationFrame(()=>{
+    GAME_FIT.raf=0;
+    updateGameFitScale();
+  });
+}
+
+function updateGameFitScale(){
+  const shell=document.getElementById("game-viewport-shell");
+  const root=document.getElementById("game-scale-root");
+  if(!shell||!root) return;
+
+  // 측정 전 transform 제거 (레이아웃 박스에 scale 잔여 공간 방지)
+  root.style.transform="none";
+  root.style.width="auto";
+  root.style.height="auto";
+  shell.style.width="auto";
+  shell.style.height="auto";
+  shell.style.left="0px";
+  shell.style.top="0px";
+
+  void root.offsetWidth;
+
+  const rect=root.getBoundingClientRect();
+  const baseWidth=Math.max(
+    1,
+    Math.ceil(Math.max(root.scrollWidth, root.offsetWidth, rect.width))
+  );
+  const baseHeight=Math.max(
+    1,
+    Math.ceil(Math.max(root.scrollHeight, root.offsetHeight, rect.height))
+  );
+
+  GAME_FIT.baseWidth=baseWidth;
+  GAME_FIT.baseHeight=baseHeight;
+
+  const availW=Math.max(1, window.innerWidth);
+  const availH=Math.max(1, window.innerHeight);
+  const scale=Math.min(availW / baseWidth, availH / baseHeight, 1);
+  GAME_FIT.scale=scale;
+
+  root.style.width=baseWidth+"px";
+  root.style.height=baseHeight+"px";
+  root.style.transformOrigin="top left";
+  root.style.transform=`scale(${scale})`;
+
+  const fittedW=Math.max(1, Math.round(baseWidth * scale));
+  const fittedH=Math.max(1, Math.round(baseHeight * scale));
+  shell.style.width=fittedW+"px";
+  shell.style.height=fittedH+"px";
+  shell.style.left=Math.max(0, Math.round((availW - fittedW) / 2))+"px";
+  shell.style.top=Math.max(0, Math.round((availH - fittedH) / 2))+"px";
+}
+
+function initGameFitScale(){
+  scheduleGameFitScale();
+  requestAnimationFrame(scheduleGameFitScale);
+
+  if(!GAME_FIT.resizeBound){
+    GAME_FIT.resizeBound=true;
+    window.addEventListener("resize", scheduleGameFitScale);
+  }
+
+  // HUD/배경 이미지 로드 후 높이 재측정
+  const root=document.getElementById("game-scale-root");
+  if(root){
+    root.querySelectorAll("img").forEach(img=>{
+      if(!img.complete){
+        img.addEventListener("load", scheduleGameFitScale, {once:true});
+      }
+    });
   }
 }
 
@@ -4810,6 +4907,10 @@ function showClearIllustration(){
   overlay.className="end-illustration-overlay";
   overlay.innerHTML=`
     <div class="end-illustration-stage">
+      <p class="end-illustration-message">
+        여러분과 식물들이 힘을 합친 결과,<br>
+        학교를 좀비들로부터 지켜냈습니다! 좀비들은 오늘도 퇴근입니다!
+      </p>
       <img
         src="images/screens/clear_illustration.png"
         alt=""
@@ -4844,6 +4945,10 @@ function showGameOverIllustration(){
   overlay.className="end-illustration-overlay";
   overlay.innerHTML=`
     <div class="end-illustration-stage">
+      <p class="end-illustration-message">
+        결국 학교는 좀비들에게 함락되었습니다…<br>
+        내일부터 등교는 조금 어려울지도 모르겠습니다...
+      </p>
       <img
         src="images/screens/gameover_illustration.png"
         alt=""
@@ -5427,4 +5532,4 @@ preloadSfx();
 preloadBattleBgm();
 initBgmAutoplayUnlock();
 injectVisualAssetStyles();
-energyDisplay.textContent=energy;waveDisplay.textContent=currentWave;lifeDisplay.textContent=life;scoreDisplay.textContent=score;updatePlantButtons();setupBattleSideLayout();createBoard();requestAnimationFrame(gameLoop);
+energyDisplay.textContent=energy;waveDisplay.textContent=currentWave;lifeDisplay.textContent=life;scoreDisplay.textContent=score;updatePlantButtons();setupBattleSideLayout();createBoard();initGameFitScale();requestAnimationFrame(gameLoop);

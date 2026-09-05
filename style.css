@@ -478,25 +478,50 @@ body:has(#start-overlay:not(.hidden)) .page-brand-logo {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 14px;
   width: min(96vw, 1280px);
   max-height: 96vh;
-  padding: 10px 14px 18px;
+  padding: 12px 14px 16px;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+.end-illustration-message {
+  flex: 0 0 auto;
+  width: min(96%, 1100px);
+  margin: 0;
+  padding: 0 8px;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: rgba(255, 250, 240, 0.94);
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.78),
+    0 0 8px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
 }
 
 .end-illustration-image {
   display: block;
+  flex: 0 1 auto;
   width: auto;
   height: auto;
   max-width: 100%;
-  max-height: calc(96vh - 84px);
+  max-height: calc(96vh - 170px);
   object-fit: contain;
   user-select: none;
   pointer-events: none;
 }
 
 .end-illustration-button {
+  flex: 0 0 auto;
   margin: 0;
   min-height: 46px;
   padding: 12px 28px;
@@ -5088,6 +5113,28 @@ body > h1 {
   font-weight: 600;
   line-height: 1.68;
   text-align: center;
+}
+
+/* 버전/제작자 표기 — 페이지 고정, 시작·플레이 중 항상 표시 */
+.start-credit {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: rgba(255, 250, 240, 0.72);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  z-index: 10001;
 }
 
 /* ---------- 상단 HUD (이미지 프레임) ---------- */
@@ -10107,5 +10154,137 @@ body > h1 {
     box-shadow:
       0 0 0 4px rgba(255, 210, 80, 0.4),
       0 0 22px 3px rgba(255, 200, 50, 0.55);
+  }
+}
+
+/* =========================================================
+   Viewport fit scale — 작은 화면에서 게임 전체를 균일 축소
+   (카드/보드/HUD 개별 크기 변경 없음)
+   ========================================================= */
+
+html {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+#game-viewport-shell {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+
+#game-viewport-shell > #game-scale-root {
+  pointer-events: auto;
+}
+
+#game-scale-root {
+  position: relative;
+  box-sizing: border-box;
+  transform-origin: top left;
+  will-change: transform;
+}
+
+/* 디자인 기준 크기 고정 (scene-fit 부분 축소 대신 전체 scale 사용) */
+#game-scale-root .battle-layout {
+  --scene-width: 1480px !important;
+  --scene-fit: 1 !important;
+  --scene-display-width: 1480px !important;
+  --scene-display-height: calc(1480px * 846 / 1860) !important;
+  --field-width: 1480px !important;
+  --field-height: calc(1480px * 846 / 1860) !important;
+  width: calc(220px + 14px + 1480px) !important;
+  max-width: none !important;
+  grid-template-columns: 220px 1480px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+#game-scale-root .battle-center {
+  width: 1480px !important;
+  height: calc(1480px * 846 / 1860) !important;
+}
+
+#game-scale-root .battle-scene {
+  width: 1480px !important;
+  zoom: 1 !important;
+}
+
+#game-scale-root .battle-sidebar,
+#game-scale-root .battle-sidebar-left {
+  position: relative !important;
+  top: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+#game-scale-root .page-brand-logo {
+  position: absolute !important;
+  top: 10px !important;
+  right: 16px !important;
+  left: auto !important;
+  z-index: 40;
+}
+
+#game-scale-root .status-bar {
+  width: 990px !important;
+  max-width: none !important;
+}
+
+/* plant-info는 battle-main(보드 열) 안에 있으므로 scene 폭만 사용 */
+#game-scale-root #plant-info.plant-info-bottom,
+#game-scale-root .battle-main > #plant-info {
+  width: 100% !important;
+  max-width: 1480px !important;
+  box-sizing: border-box !important;
+}
+
+#game-scale-root .tutorial-guide,
+#game-scale-root .tool-menu {
+  width: calc(220px + 14px + 1480px) !important;
+  max-width: none !important;
+}
+
+/* 기존 좁은 화면 가로 스크롤 허용 규칙이 전체 scale과 충돌하지 않게 */
+@media (max-width: 1290px) {
+  body {
+    overflow-x: visible !important;
+  }
+
+  #game-scale-root .battle-layout {
+    --scene-width: 1480px !important;
+    width: calc(220px + 14px + 1480px) !important;
+    grid-template-columns: 220px 1480px !important;
+  }
+}
+
+@media (max-width: 1279px) {
+  body {
+    overflow-x: visible !important;
+  }
+
+  #game-scale-root .status-bar {
+    width: 990px !important;
+  }
+
+  #game-scale-root .tutorial-guide,
+  #game-scale-root .tool-menu,
+  #game-scale-root .battle-layout {
+    width: calc(220px + 14px + 1480px) !important;
+  }
+
+  #game-scale-root #plant-info.plant-info-bottom,
+  #game-scale-root .battle-main > #plant-info {
+    width: 100% !important;
+    max-width: 1480px !important;
   }
 }

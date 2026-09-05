@@ -8,12 +8,15 @@
 
   <link
     rel="stylesheet"
-    href="style.css?v=135"
+    href="style.css?v=144"
   >
 </head>
 
 
 <body>
+
+  <div id="game-viewport-shell">
+  <div id="game-scale-root">
 
   <img
     class="page-brand-logo"
@@ -458,6 +461,9 @@
 
   <div class="game-board"></div>
 
+  </div><!-- /#game-scale-root -->
+  </div><!-- /#game-viewport-shell -->
+
 
   <!-- ======================================
        시작 화면
@@ -508,6 +514,9 @@
   </div>
 
 
+  <p id="start-credit" class="start-credit" aria-hidden="true"></p>
+
+
   <!-- ======================================
        Wave / 해금 팝업
        ====================================== -->
@@ -535,7 +544,7 @@
 
 
   <script src="data.js?v=2"></script>
-  <script src="game.js?v=133"></script>
+  <script src="game.js?v=139"></script>
 
 </body>
 
