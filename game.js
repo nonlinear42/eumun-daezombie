@@ -2272,6 +2272,8 @@ let waveZombieCount = 0;
 let resolvedZombies = 0;
 let waveInProgress = false;
 let gameOver = false;
+/** 결과창 상태: null | "clear" | "gameover" */
+let resultScreenMode = null;
 let currentSpawnTimer = null;
 
 // ============================================
@@ -7521,7 +7523,7 @@ function finishTutorial(){
   if(currentSpawnTimer){clearInterval(currentSpawnTimer);currentSpawnTimer=null;}tutorialGuide.classList.add("hidden");unlockTitle.textContent="🎓 튜토리얼 완료!";unlockContent.innerHTML=`<p>기본적인 방어 방법을 익혔습니다.</p><p>본게임에서는 단어에 포함된 음운의 특징을 직접 판단해 식물을 선택해야 합니다.</p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="Wave 1 시작";unlockNextButton.dataset.action="start-main";delete unlockNextButton.dataset.wave;unlockOverlay.classList.remove("hidden");
   updatePauseUI();
 }
-function resetForMainGame(){gameStartTime=nowGame();finalScoreCalculated=false;
+function resetForMainGame(){gameStartTime=nowGame();finalScoreCalculated=false;resultScreenMode=null;
   forceUnpauseGame();
   practiceMode=false;
   clearTutorialGuide();
@@ -8003,7 +8005,21 @@ function showNextWavePopup(nextWave){
   else{unlockTitle.textContent="⚔ 다음 Wave";unlockContent.innerHTML=`<p>지금까지 해금한 식물을 조합해 방어하세요.</p>`;}
   unlockNextButton.textContent=nextWave===9?"FINAL WAVE 시작":`Wave ${nextWave} 시작`;unlockNextButton.dataset.wave=nextWave;unlockOverlay.classList.remove("hidden");playSfx("wave_start");
 }
-unlockNextButton.addEventListener("click",function(){playSfx("click_ui");const action=unlockNextButton.dataset.action;if(action==="start-main"){startMainGame();return;}if(action==="start-raid"){startRaid();return;}const nextWave=Number(unlockNextButton.dataset.wave);if(!nextWave)return;unlockOverlay.classList.add("hidden");currentWave=nextWave;startWave();});
+unlockNextButton.addEventListener("click",function(){
+  playSfx("click_ui");
+  const action=unlockNextButton.dataset.action;
+  if(action==="restart"){
+    location.reload();
+    return;
+  }
+  if(action==="start-main"){startMainGame();return;}
+  if(action==="start-raid"){startRaid();return;}
+  const nextWave=Number(unlockNextButton.dataset.wave);
+  if(!nextWave)return;
+  unlockOverlay.classList.add("hidden");
+  currentWave=nextWave;
+  startWave();
+});
 function startWave(){
   if(gameOver)return;
   tutorialMode=false;raidMode=false;
@@ -8021,6 +8037,29 @@ function startWave(){
 function removeEndIllustrationOverlay(){
   const existing=document.getElementById("end-illustration-overlay");
   if(existing) existing.remove();
+}
+
+/**
+ * 클리어/게임오버 공통 결과창 (#unlock-overlay) 표시.
+ * mode: "clear" | "gameover"
+ * 점수·통계는 endGame/finishGame에서 이미 채워 둔 내용을 재사용한다.
+ */
+function showResultScreen(mode){
+  if(mode!=="clear"&&mode!=="gameover")return;
+
+  resultScreenMode=mode;
+  removeEndIllustrationOverlay();
+
+  // 하단 공통 다시하기 (기존 restart 로직: location.reload)
+  unlockNextButton.style.display="inline-block";
+  unlockNextButton.textContent="다시하기";
+  unlockNextButton.dataset.action="restart";
+  delete unlockNextButton.dataset.wave;
+
+  // HUD의 별도 다시시작 버튼은 숨기고 결과창 하단 버튼만 사용
+  restartButton.style.display="none";
+
+  unlockOverlay.classList.remove("hidden");
 }
 
 function showClearIllustration(){
@@ -8057,8 +8096,7 @@ function showClearIllustration(){
 
   overlay.querySelector("#clear-result-button").addEventListener("click",()=>{
     playSfx("click_ui");
-    removeEndIllustrationOverlay();
-    unlockOverlay.classList.remove("hidden");
+    showResultScreen("clear");
   });
 }
 
@@ -8081,8 +8119,8 @@ function showGameOverIllustration(){
         class="end-illustration-image"
         draggable="false"
       >
-      <button type="button" class="end-illustration-button" id="gameover-retry-button">
-        다시 하기
+      <button type="button" class="end-illustration-button" id="gameover-result-button">
+        결과 보기
       </button>
     </div>
   `;
@@ -8094,9 +8132,9 @@ function showGameOverIllustration(){
     });
   });
 
-  overlay.querySelector("#gameover-retry-button").addEventListener("click",()=>{
+  overlay.querySelector("#gameover-result-button").addEventListener("click",()=>{
     playSfx("click_ui");
-    location.reload();
+    showResultScreen("gameover");
   });
 }
 
@@ -8109,7 +8147,33 @@ function endGame(){
   }
 
   forceUnpauseGame();
-  gameOver=true;waveInProgress=false;raidMode=false;stopBattleBgm();life=0;lifeDisplay.textContent=life;if(currentSpawnTimer){clearInterval(currentSpawnTimer);currentSpawnTimer=null;}restartButton.style.display="inline-block";plantButtons.forEach(button=>button.disabled=true);removeButton.disabled=true;unlockTitle.textContent="💀 GAME OVER";unlockContent.innerHTML=`<p>방어선이 무너졌습니다.</p>${buildGameFeedbackHTML(false)}`;unlockNextButton.style.display="none";
+  gameOver=true;
+  resultScreenMode=null;
+  waveInProgress=false;
+  raidMode=false;
+  stopBattleBgm();
+  life=0;
+  lifeDisplay.textContent=life;
+  if(currentSpawnTimer){
+    clearInterval(currentSpawnTimer);
+    currentSpawnTimer=null;
+  }
+
+  // 결과 보기 전 통계 보존 — reset/reload는 다시하기에서만
+  restartButton.style.display="none";
+  plantButtons.forEach(button=>button.disabled=true);
+  removeButton.disabled=true;
+
+  // 게임오버 결과 내용 준비 (클리어 보너스·최종점수 breakdown 없음)
+  unlockTitle.textContent="💀 GAME OVER";
+  unlockContent.innerHTML=`
+    <p>방어선이 무너졌습니다.</p>
+    ${buildGameFeedbackHTML(false)}
+  `;
+  unlockNextButton.style.display="none";
+  delete unlockNextButton.dataset.action;
+  delete unlockNextButton.dataset.wave;
+
   updatePauseUI();
   showGameOverIllustration();
 }
@@ -8118,6 +8182,7 @@ function finishGame(){
 
   forceUnpauseGame();
   gameOver=true;
+  resultScreenMode=null;
   waveInProgress=false;
   raidMode=false;
   stopBattleBgm();
@@ -8133,7 +8198,7 @@ function finishGame(){
 
   scoreDisplay.textContent=score;
 
-  restartButton.style.display="inline-block";
+  restartButton.style.display="none";
 
   plantButtons.forEach(
     button=>button.disabled=true
@@ -8164,8 +8229,9 @@ function finishGame(){
     ${buildGameFeedbackHTML(true)}
   `;
 
-  unlockNextButton.style.display=
-    "none";
+  unlockNextButton.style.display="none";
+  delete unlockNextButton.dataset.action;
+  delete unlockNextButton.dataset.wave;
 
   showClearIllustration();
 }
@@ -8627,10 +8693,13 @@ function injectVisualAssetStyles(){
       line-height: 1.15;
       color: #1a2e12;
       white-space: nowrap;
-      transform: none;
+      transform: translateY(1px);
+      scale: none;
       display: inline-block;
+      flex-shrink: 0;
       overflow: visible;
       width: max-content;
+      max-width: none;
     }
 
     .zombie > .hp-bar {

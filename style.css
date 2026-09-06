@@ -194,7 +194,8 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   zoom: normal;
 }
 
-/* 좀비 단어 — 상속 차단, 산세리프 UI 명시 */
+/* 좀비 단어 — 상속 차단, 산세리프 UI 명시
+   가로 압축(scaleX/강제 width) 금지 · 박스 내 광학 세로중앙(+1px) */
 #battle-overlay .zombie.zombie-canvas-hud .zombie-word-text {
   font-family: "SeoulNamsanGame", sans-serif !important;
   font-size: 13px !important;
@@ -208,13 +209,15 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   -webkit-text-fill-color: var(--pvz-ink, #1a2e12) !important;
   text-shadow: none !important;
   white-space: nowrap !important;
-  transform: none !important;
+  /* scale/scaleX 없이 Y만 — 박스 geometry·label top 불변 */
+  transform: translateY(1px) !important;
   scale: none !important;
   zoom: normal !important;
   display: inline-block;
+  flex-shrink: 0 !important;
   overflow: visible;
-  max-width: none;
-  width: max-content;
+  max-width: none !important;
+  width: max-content !important;
 }
 
 #battle-overlay .zombie.zombie-canvas-hud .zombie-type-badge {
@@ -10827,8 +10830,16 @@ body {
   font-synthesis: none !important;
 }
 
-/* 보드 라벨: 가로 압축 금지 재확인 */
-#battle-overlay .zombie.zombie-canvas-hud .zombie-word-text,
+/* 보드 라벨: 가로 압축 금지 재확인
+   zombie word만 광학 세로중앙 translateY(1px) — scaleX 없음 */
+#battle-overlay .zombie.zombie-canvas-hud .zombie-word-text {
+  transform: translateY(1px) !important;
+  letter-spacing: 0 !important;
+  flex-shrink: 0 !important;
+  width: max-content !important;
+  max-width: none !important;
+  scale: none !important;
+}
 .game-board .plant > .plant-name,
 .game-board .plant.plant-canvas-hud > .plant-name {
   transform: none !important;
