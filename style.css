@@ -1,6 +1,26 @@
+/* =========================================================
+   서울남산체 (게임 UI 전용)
+   fonts/SeoulNamsanM.ttf · fonts/SeoulNamsanB.ttf
+   ========================================================= */
+@font-face {
+  font-family: "SeoulNamsanGame";
+  src: url("fonts/SeoulNamsanM.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SeoulNamsanGame";
+  src: url("fonts/SeoulNamsanB.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
+  font-family: "SeoulNamsanGame", sans-serif;
   background-color: #f3f4f6;
   text-align: center;
 }
@@ -42,6 +62,233 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+
+/* =========================================
+   전투 Canvas
+   - CSS 표시: (990+RIGHT_PAD)×(450+TOP_PAD) — JS syncBattleCanvasResolution()이 맞춤
+   - 논리 좌표: 990×450 (RIGHT/TOP overscan은 렌더만)
+   - pointer-events: none → 식물 배치 클릭 가로채지 않음
+========================================= */
+
+.game-board > .battle-canvas,
+#battle-canvas.battle-canvas {
+  position: absolute;
+  left: 0;
+  /* TOP_PAD / RIGHT_PAD: JS가 width/height/top을 동기화. 여기 초기값만. */
+  top: -50px;
+  width: 1190px;
+  height: 500px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  pointer-events: none;
+  /* 식물 이름(DOM z≥22) 아래, 셀 배경 위 — 스프라이트만 */
+  z-index: 15;
+  display: block;
+  box-sizing: border-box;
+  image-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Canvas 좀비: PNG는 Canvas — 단어/HP HUD는 #battle-overlay (보드와 동일 좌표) */
+.game-board > #battle-overlay,
+#battle-overlay.battle-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 990px;
+  height: 450px;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+  z-index: 20;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+#battle-overlay .zombie.zombie-canvas-hud {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  justify-content: flex-start;
+  position: absolute;
+  /* left/top 은 JS getZombieOverlayPosition — transform 위치 금지
+     (.game-board > .zombie { transform:none !important } 잔여와 충돌 방지) */
+  transform: none !important;
+  transition: none !important;
+  will-change: auto;
+  pointer-events: none;
+}
+
+#battle-overlay .zombie.zombie-canvas-hud .hp-bar {
+  margin-top: auto;
+  /* 일반 Wave 좀비 HP만 — 위치/크기/색/테두리 유지, 채도만 완화 */
+  opacity: 0.85;
+}
+
+.game-board > .zombie .hp-bar {
+  opacity: 0.85;
+}
+
+/* Canvas plant 이름표 — #battle-overlay 보드 좌표 (셀 로컬 top 금지) */
+#battle-overlay > .plant-name.plant-name-canvas-overlay {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: absolute !important;
+  /* left/top: JS getCanvasPlantLabelBoardY — 셀/zoom 재매핑 금지 */
+  right: auto !important;
+  bottom: auto !important;
+  width: max-content !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 1px 4px !important;
+  border-radius: 7px !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.16) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  font-synthesis: none !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+  white-space: nowrap !important;
+  z-index: 22 !important;
+  pointer-events: none !important;
+  transform: translateX(-50%) !important;
+}
+
+/* =========================================================
+   전투 보드 UI 텍스트 (zombie word / plant name 전용)
+   서울남산체 Bold — 사이드바 카드 레이아웃·HUD 이미지는 별도
+   ========================================================= */
+:root {
+  --battle-board-ui-font: "SeoulNamsanGame", sans-serif;
+  --game-ui-font: "SeoulNamsanGame", sans-serif;
+}
+
+/* Canvas HUD 단어 라벨 컨테이너 — 위치용 translateX만, 글자 스케일 금지 */
+#battle-overlay .zombie.zombie-canvas-hud > .zombie-word-label {
+  position: absolute;
+  left: 50%;
+  top: -18px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: max-content;
+  max-width: none;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 248, 0.97);
+  border: 1px solid rgba(74, 108, 52, 0.55);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65), 0 2px 4px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  z-index: 22;
+  pointer-events: none;
+  overflow: visible;
+  font-stretch: normal;
+  zoom: normal;
+}
+
+/* 좀비 단어 — 상속 차단, 산세리프 UI 명시 */
+#battle-overlay .zombie.zombie-canvas-hud .zombie-word-text {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  letter-spacing: 0 !important;
+  line-height: 1.15 !important;
+  color: var(--pvz-ink, #1a2e12) !important;
+  -webkit-text-fill-color: var(--pvz-ink, #1a2e12) !important;
+  text-shadow: none !important;
+  white-space: nowrap !important;
+  transform: none !important;
+  scale: none !important;
+  zoom: normal !important;
+  display: inline-block;
+  overflow: visible;
+  max-width: none;
+  width: max-content;
+}
+
+#battle-overlay .zombie.zombie-canvas-hud .zombie-type-badge {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  letter-spacing: 0 !important;
+  line-height: 1.15 !important;
+  transform: none !important;
+  flex-shrink: 0;
+}
+
+/*
+ * 보드 plant name — 서울남산체 Bold
+ * (사이드바 .plant-name-label 은 카드 규칙에서 별도 처리)
+ */
+.game-board .plant > .plant-name,
+.game-board .plant.plant-canvas-hud > .plant-name {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  letter-spacing: 0 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  transform: none !important;
+  scale: none !important;
+  zoom: normal !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: max-content !important;
+  max-width: none !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  text-shadow: none !important;
+}
+
+/* Canvas plant: PNG 없음 — plant-visual은 소리꽃 VFX 호스트, plant-name DOM 유지 */
+.game-board .plant.plant-canvas-hud {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  /* stacking context 금지 → 이름 z-index가 battle-canvas(15) 위로 탈출 */
+  z-index: auto !important;
+  opacity: 1 !important;
+  isolation: auto !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+.game-board .plant.plant-canvas-hud .plant-visual {
+  height: 74px;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Canvas plant: 이름표는 overlay — 셀 안 .plant-name 없음 */
+.game-board .plant.plant-canvas-hud > .plant-name {
+  display: none !important;
+}
+
+.game-board .cell:has(> .plant.plant-canvas-hud) {
+  z-index: auto !important;
+  isolation: auto !important;
+  overflow: visible !important;
+  opacity: 1 !important;
+  transform: none !important;
 }
 
 
@@ -496,8 +743,9 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   background: none;
   box-shadow: none;
   color: rgba(255, 250, 240, 0.94);
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 27px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.35;
   letter-spacing: 0.01em;
   text-align: center;
@@ -530,8 +778,9 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   border: 1px solid rgba(79, 147, 216, 0.65);
   background: linear-gradient(180deg, #5aa6e8 0%, #3d7fc4 100%);
   color: #fff;
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 16px;
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
   transition: transform 0.12s ease, filter 0.12s ease;
@@ -2111,8 +2360,9 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
 /* JS에서 이름 전용 span이 있는 경우 */
 .battle-sidebar .plant-name-label {
   display: block;
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1.1;
   margin-bottom: 3px;
   letter-spacing: -0.2px;
@@ -2121,8 +2371,9 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
 /* 기존 마크업이 strong/b 태그를 쓰는 경우도 함께 대응 */
 .battle-sidebar .plant-button strong,
 .battle-sidebar .plant-button b {
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1.1;
 }
 
@@ -2354,8 +2605,9 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   background: rgba(255,255,255,.95) !important;
   border: 1px solid rgba(0,0,0,.16) !important;
   box-shadow: 0 1px 3px rgba(0,0,0,.18);
+  font-family: "SeoulNamsanGame", sans-serif !important;
   font-size: 11px !important;
-  font-weight: 900 !important;
+  font-weight: 700 !important;
   line-height: 1.05 !important;
   white-space: nowrap;
   z-index: 20 !important;
@@ -3046,29 +3298,15 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   transform-origin: center bottom;
 }
 
-/* 흰색 섬광을 일러스트 위에 잠깐 얹는다.
-   plant-image의 기존 HP 경고 filter와 충돌하지 않는다. */
+/* 흰색/누런 피격 섬광 제거 — HP aura 가시성 우선. 피격 반동(transform)은 유지 */
 .plant.plant-hit .plant-visual::after,
 .plant.plant-hit-heavy .plant-visual::after,
 .plant.plant-hit-boss .plant-visual::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 46%;
-  width: 78px;
-  height: 78px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(255,255,255,.88) 0%,
-    rgba(255,245,210,.48) 38%,
-    rgba(255,255,255,0) 72%
-  );
-  opacity: 0;
-  pointer-events: none;
-  z-index: 30;
-  animation: plantHitFlashV23 .36s ease-out forwards;
+  content: none !important;
+  display: none !important;
+  animation: none !important;
+  background: none !important;
+  opacity: 0 !important;
 }
 
 @keyframes plantHitFlashV23 {
@@ -3550,6 +3788,11 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
 
 .game-board > .zombie.zombie-dying .zombie-word-label,
 .game-board > .zombie.zombie-dying .hp-bar {
+  animation: zombieDeathUiFade .20s ease-out forwards !important;
+}
+
+#battle-overlay .zombie.zombie-dying .zombie-word-label,
+#battle-overlay .zombie.zombie-dying .hp-bar {
   animation: zombieDeathUiFade .20s ease-out forwards !important;
 }
 
@@ -4583,12 +4826,12 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   left: 0 !important;
   right: 0 !important;
   width: max-content !important;
-  max-width: 82px !important;
+  max-width: none !important;
   margin: 0 auto !important;
   box-sizing: border-box !important;
   padding: 2px 5px !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
   white-space: nowrap !important;
   transform: none !important;
   animation: none !important;
@@ -4633,10 +4876,14 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   top: auto !important;
   bottom: 12px !important;
   z-index: 18 !important;
-  font-size: 10px !important;
+  /* font-size/line-height/weight 는 --battle-board-ui-font 보드 규칙이 담당 */
   padding: 1px 4px !important;
-  line-height: 1.1 !important;
   background: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Canvas plant 이름: overlay 전용 (셀 로컬 top 규칙 무력화) */
+.game-board .plant.plant-canvas-hud > .plant-name {
+  display: none !important;
 }
 
 /* =========================================================
@@ -5053,13 +5300,14 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   --pd-radius-sm: 9px;
   --pd-shadow-panel: 0 8px 18px rgba(0, 0, 0, 0.22);
   --pd-shadow-btn: 0 2px 0 rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --pd-font: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  --pd-font: "SeoulNamsanGame", sans-serif;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
   font-family: var(--pd-font);
+  font-weight: 500;
   color: var(--pd-text);
   background:
     radial-gradient(1200px 520px at 50% -10%, rgba(62, 98, 150, 0.22), transparent 60%),
@@ -5178,8 +5426,9 @@ body > h1 {
   border: none;
   background: none;
   color: #fff6d8;
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 34px;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-shadow:
     0 1px 0 rgba(0, 0, 0, 0.55),
@@ -5201,8 +5450,9 @@ body > h1 {
     0 8px 18px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 230, 0.45);
   color: #2a1c08;
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 24px;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.2;
   cursor: pointer;
@@ -5233,8 +5483,9 @@ body > h1 {
 #start-overlay .start-tagline {
   margin: 4px 0 10px;
   color: var(--pd-text-soft);
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 16.5px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.72;
   text-align: center;
 }
@@ -5242,8 +5493,9 @@ body > h1 {
 #start-overlay .start-hint {
   margin: 0 0 14px;
   color: rgba(200, 214, 234, 0.78);
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 14.5px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.68;
   text-align: center;
 }
@@ -5252,18 +5504,42 @@ body > h1 {
 .start-credit {
   position: fixed;
   right: 20px;
-  bottom: 20px;
+  bottom: 34px;
   margin: 0;
   padding: 0;
   border: none;
   background: none;
   box-shadow: none;
   color: rgba(255, 250, 240, 0.72);
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 18px;
   font-weight: 500;
   line-height: 1.3;
   letter-spacing: 0.01em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  z-index: 10001;
+}
+
+/* 서체 출처 — 제작자 표기 바로 아래, 아주 작은 보조 크레딧 */
+.font-credit {
+  position: fixed;
+  right: 20px;
+  bottom: 14px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: rgba(255, 250, 240, 0.42);
+  font-family: "SeoulNamsanGame", sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
   pointer-events: none;
   user-select: none;
   white-space: nowrap;
@@ -5320,6 +5596,8 @@ body > h1 {
   margin: 0;
   padding: 0 4px;
   box-sizing: border-box;
+  /* HUD 숫자는 기존 스택 유지 — 서울남산체/정렬·크기 변경 금지 */
+  font-family: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   color: #fff8e8;
   font-weight: 900;
   font-size: clamp(13px, 1.55vw, 20px);
@@ -5431,8 +5709,9 @@ body > h1 {
   background: linear-gradient(180deg, #8f3f3f 0%, #703030 100%);
   box-shadow: var(--pd-shadow-btn);
   color: #fff;
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -5471,7 +5750,9 @@ body > h1 {
 }
 
 #plant-info-content {
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 14px;
+  font-weight: 500;
   color: var(--pd-text);
 }
 
@@ -5481,13 +5762,16 @@ body > h1 {
 
 #tutorial-guide-title {
   margin-bottom: 6px;
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 15px;
-  font-weight: 900;
+  font-weight: 700;
   color: #b8d8ff;
 }
 
 #tutorial-guide-text {
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 14px;
+  font-weight: 500;
   color: var(--pd-text);
 }
 
@@ -5574,8 +5858,9 @@ body > h1 {
 
 .battle-sidebar .plant-name-label {
   display: block;
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 13px !important;
-  font-weight: 900 !important;
+  font-weight: 700 !important;
   line-height: 1.15 !important;
   margin-bottom: 2px !important;
   color: #f3f7ff !important;
@@ -5738,16 +6023,19 @@ body > h1 {
 
 .unlock-card h2 {
   margin: 0 0 10px;
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 24px;
-  font-weight: 900;
+  font-weight: 700;
   color: #fff;
 }
 
 .unlock-card p {
   margin: 8px 0;
   color: var(--pd-text-soft);
+  font-family: "SeoulNamsanGame", sans-serif;
   line-height: 1.55;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .unlock-plant {
@@ -5784,8 +6072,9 @@ body > h1 {
   border-radius: var(--pd-radius-md);
   border: 1px solid transparent;
   box-shadow: var(--pd-shadow-btn);
+  font-family: "SeoulNamsanGame", sans-serif;
   font-size: 15px;
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
   transition: transform 0.12s ease, filter 0.12s ease;
 }
@@ -6074,7 +6363,7 @@ body > h1 {
   letter-spacing: 0.08em;
 }
 
-/* ---------- 식물 이름 (보드 + 사이드바) 가독성 ---------- */
+/* ---------- 식물 이름 (보드 + 사이드바) 가독성 — 색만; 보드 폰트는 --battle-board-ui-font ---------- */
 
 .plant-name,
 .plant > .plant-name {
@@ -6082,7 +6371,6 @@ body > h1 {
   background: rgba(255, 255, 248, 0.97) !important;
   border: 1px solid rgba(74, 108, 52, 0.55) !important;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65), 0 2px 4px rgba(0, 0, 0, 0.18) !important;
-  font-weight: 900 !important;
   -webkit-text-fill-color: var(--pvz-ink) !important;
   text-shadow: none !important;
   opacity: 1 !important;
@@ -6090,8 +6378,9 @@ body > h1 {
 
 .battle-sidebar .plant-name-label {
   color: var(--pvz-ink) !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
   font-size: 13px !important;
-  font-weight: 900 !important;
+  font-weight: 700 !important;
   -webkit-text-fill-color: var(--pvz-ink) !important;
 }
 
@@ -7949,6 +8238,16 @@ body > h1 {
   z-index: 5;
 }
 
+/* Canvas HUD 식물: z-index 5 stacking에 이름이 갇히지 않게 */
+.battle-center .game-board-viewport .game-board .plant.plant-canvas-hud {
+  z-index: auto !important;
+  opacity: 1 !important;
+}
+
+.battle-center .game-board-viewport .game-board .plant.plant-canvas-hud > .plant-name {
+  z-index: 22 !important;
+}
+
 .battle-center .game-board-viewport .game-board > .zombie {
   z-index: 20;
 }
@@ -9275,8 +9574,9 @@ body > h1 {
   box-sizing: border-box;
   color: #24180c !important;
   -webkit-text-fill-color: #24180c !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
   font-size: 12.5px !important;
-  font-weight: 900 !important;
+  font-weight: 700 !important;
   line-height: 1.15 !important;
   letter-spacing: -0.35px !important;
   white-space: nowrap;
@@ -9289,11 +9589,11 @@ body > h1 {
     0 0 1px #fff;
 }
 
-/* 2글자: 가장 크게 */
+/* 2글자: 짧게 더 키우지 않음 — 기본(3글자)과 동일 크기 */
 .battle-sidebar .plant-name-label.name-len-2 {
-  font-size: 14.5px !important;
-  letter-spacing: -0.15px !important;
-  line-height: 1.12 !important;
+  font-size: 12.5px !important;
+  letter-spacing: -0.35px !important;
+  line-height: 1.14 !important;
 }
 
 /* 3글자: 중간 */
@@ -9314,6 +9614,8 @@ body > h1 {
 #remove-button .plant-name-label {
   font-size: 14px !important;
   letter-spacing: -0.25px !important;
+  /* 제목만 박스 상단에서 4px 아래 — 환불 문구 불변 */
+  transform: translateY(4px) !important;
 }
 
 .battle-sidebar .plant-role-sep,
@@ -9336,7 +9638,7 @@ body > h1 {
   padding: 0 1px;
   box-sizing: border-box;
   color: #24180c !important;
-  font-size: 13px !important;
+  font-size: 11px !important;
   font-weight: 900 !important;
   line-height: 1 !important;
   letter-spacing: -0.15px;
@@ -9594,25 +9896,19 @@ body > h1 {
   100% { filter: brightness(1) saturate(1); }
 }
 
-/* 피격 지점 작은 impact spark (기본 짧고 작게 / 강공격만 약간 큼) */
+/* 피격 지점 작은 impact spark — 노란 타원 제거, 짧은 크림 점만 (Canvas 비활성 폴백) */
 .hit-impact-spark {
   position: absolute;
-  width: 11px;
-  height: 11px;
-  margin-left: -5.5px;
-  margin-top: -5.5px;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  margin-top: -1.5px;
   pointer-events: none;
   z-index: 20;
   border-radius: 50%;
-  background:
-    radial-gradient(
-      circle,
-      rgba(255, 252, 235, 0.98) 0%,
-      rgba(255, 214, 120, 0.75) 38%,
-      rgba(255, 170, 70, 0) 72%
-    );
-  box-shadow: 0 0 5px rgba(255, 220, 140, 0.7);
-  animation: hitImpactSparkV95 0.18s ease-out forwards;
+  background: rgba(255, 250, 240, 0.95);
+  box-shadow: none;
+  animation: hitImpactSparkV95 0.14s ease-out forwards;
 }
 
 .hit-impact-spark::before,
@@ -10239,26 +10535,48 @@ body > h1 {
   text-align: center !important;
   margin: 0 !important;
   margin-bottom: 0 !important;
-  padding: 0 !important;
-  /* 글자 수와 무관한 고정 line-height — font-size 규칙(name-len-*)은 유지 */
-  line-height: 1 !important;
-  /* 모음 포함 기본 보정 유지 — 모음은 이 값을 그대로 사용 */
-  transform: translate(-2px, -1px) !important;
-}
-
-/* 자음 이름만 공통으로 아래로 2px (모음 미변경) */
-.battle-sidebar .consonant-group .plant-button .plant-name-label,
-.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-2,
-.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-3,
-.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4 {
+  padding: 1px 0 0 !important;
+  box-sizing: border-box !important;
+  /* 서울남산체 Bold — 획 위쪽 clipping 방지용 여유 */
+  font-weight: 700 !important;
+  font-synthesis: none !important;
+  line-height: 1.2 !important;
+  /* 공통 기준선: 기존 -1px보다 약 2px 아래로 (카드별 하드코딩 금지) */
   transform: translate(-2px, 1px) !important;
 }
 
-/* 에너지(소리꽃) 이름만 아래로 1px */
+/* 자음 2~3글자: 크기만 유지, 세로 기준선은 공통 규칙 */
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-3 {
+  font-size: 12px !important;
+  letter-spacing: -0.35px !important;
+  line-height: 1.2 !important;
+  transform: translate(-2px, 1px) !important;
+}
+
+/* 자음 4글자+: font-size만 축소 (연구개음·경구개음). 기준선 동일 */
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4 {
+  font-size: 10px !important;
+  letter-spacing: -0.45px !important;
+  line-height: 1.2 !important;
+  transform: translate(-2px, 1px) !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+/* 에너지(소리꽃)도 동일 기준선 */
 .battle-sidebar .energy-group .plant-button .plant-name-label,
 .battle-sidebar .energy-group .plant-button .plant-name-label.name-len-2,
 .battle-sidebar .energy-group .plant-button .plant-name-label.name-len-3,
 .battle-sidebar .energy-group .plant-button .plant-name-label.name-len-4 {
+  transform: translate(-2px, 1px) !important;
+  line-height: 1.2 !important;
+}
+
+/* 모음 4글자만(평순/원순/후설/전설모음) — 세로 위치만 약 1px 위로. 폰트·자음·3글자 모음 불변 */
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-4 {
   transform: translate(-2px, 0) !important;
 }
 
@@ -10458,4 +10776,87 @@ body {
     width: 100% !important;
     max-width: 1480px !important;
   }
+}
+
+/* =========================================================
+   서울남산체 Bold / Medium 최종 매핑
+   (@font-face 500/700만 사용 — 합성 굵기·스케일 압축 금지)
+   HUD 숫자·로고 이미지·카드 geometry 는 변경하지 않음
+   ========================================================= */
+
+/* Bold (700) */
+#battle-overlay .zombie.zombie-canvas-hud .zombie-word-text,
+#battle-overlay > .plant-name.plant-name-canvas-overlay,
+.game-board .plant > .plant-name,
+.game-board .plant.plant-canvas-hud > .plant-name,
+.battle-sidebar .plant-name-label,
+.battle-sidebar .plant-button strong,
+.battle-sidebar .plant-button b,
+#remove-button .plant-name-label,
+.start-buttons button,
+#unlock-next-button,
+#restart-button,
+.pause-overlay-label,
+.pause-resume-button,
+.end-illustration-button,
+.unlock-card h2,
+#unlock-title,
+.unlock-plant-name,
+#tutorial-guide-title {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-weight: 700 !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+}
+
+/* Medium (500) — 안내·설명형 */
+#start-overlay .start-tagline,
+#start-overlay .start-hint,
+#tutorial-guide-text,
+#plant-info-content,
+.plant-info,
+.unlock-card p,
+#unlock-content,
+#unlock-content p,
+.end-illustration-message,
+.start-credit,
+.font-credit {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-weight: 500 !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+}
+
+/* 보드 라벨: 가로 압축 금지 재확인 */
+#battle-overlay .zombie.zombie-canvas-hud .zombie-word-text,
+.game-board .plant > .plant-name,
+.game-board .plant.plant-canvas-hud > .plant-name {
+  transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+/* 보드 plant name — pill 안 세로 중앙 + Bold 또렷함 (위치·pill 구조 유지) */
+.game-board .plant > .plant-name,
+.game-board .plant.plant-canvas-hud > .plant-name {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  font-synthesis: none !important;
+  line-height: 1.2 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* HUD 숫자: 기존 폰트 유지 */
+.status-bar .hud-value {
+  font-family: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif !important;
+}
+
+/* 안내 패널 안 짧은 강조 라벨은 Bold 유지 */
+.plant-info > strong,
+#tutorial-guide-text strong,
+#unlock-content strong,
+.unlock-plant-name {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-weight: 700 !important;
 }

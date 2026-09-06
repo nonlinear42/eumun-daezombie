@@ -7,8 +7,22 @@
   <title>음운대좀비</title>
 
   <link
+    rel="preload"
+    href="fonts/SeoulNamsanM.ttf"
+    as="font"
+    type="font/ttf"
+    crossorigin
+  >
+  <link
+    rel="preload"
+    href="fonts/SeoulNamsanB.ttf"
+    as="font"
+    type="font/ttf"
+    crossorigin
+  >
+  <link
     rel="stylesheet"
-    href="style.css?v=149"
+    href="style.css?v=160"
   >
 </head>
 
@@ -493,7 +507,9 @@
        게임판
        ====================================== -->
 
-  <div class="game-board"></div>
+  <div class="game-board">
+    <!-- 전투 Canvas는 game.js mountBattleCanvas()가 보드 좌표계(990×450)로 생성/재부착 -->
+  </div>
 
   </div><!-- /#game-scale-root -->
   </div><!-- /#game-viewport-shell -->
@@ -549,6 +565,7 @@
 
 
   <p id="start-credit" class="start-credit" aria-hidden="true"></p>
+  <p id="font-credit" class="font-credit" aria-hidden="true">서체: 서울남산체 · 서울특별시</p>
 
 
   <!-- ======================================
@@ -578,7 +595,7 @@
 
 
   <script src="data.js?v=2"></script>
-  <script src="game.js?v=144"></script>
+  <script src="game.js?v=167"></script>
 
 </body>
 

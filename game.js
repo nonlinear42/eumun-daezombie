@@ -12,6 +12,7 @@ const CELL_SIZE = 90;
 const BOARD_COLUMNS = 11;
 const BOARD_ROWS = 5;
 const BOARD_WIDTH = CELL_SIZE * BOARD_COLUMNS;
+const BOARD_HEIGHT = CELL_SIZE * BOARD_ROWS;
 const ZOMBIE_WIDTH = 58;
 // 투사체 발사점 (셀 좌상단 기준 px) — translate(-50%,-50%) 중심
 const PROJECTILE_START_OFFSET_X = 54;
@@ -589,6 +590,1597 @@ function getZombieImage(type){
   return ZOMBIE_IMAGES[type] || ZOMBIE_IMAGES.normal;
 }
 
+/* =========================================================
+   Canvas battle foundation (1단계)
+   - 논리 좌표: BOARD_WIDTH×BOARD_HEIGHT (990×450) CSS 픽셀
+   - 백킹 스토어: CSS × min(devicePixelRatio,2) × GAME_FIT.scale
+     → #game-scale-root transform:scale 과 HiDPI에서도 선명도 유지
+   - 테스트 그리드: __BATTLE_CANVAS__.showTestGrid = true
+   ========================================================= */
+const IMAGE_CACHE = {
+  bySrc:new Map(),
+
+  get(src){
+    if(!src)return null;
+    return this.bySrc.get(src)||null;
+  },
+
+  /** 이미 로딩 중이거나 완료된 Image 반환. 매 draw마다 new Image() 하지 않음. */
+  load(src){
+    if(!src)return null;
+    let img=this.bySrc.get(src);
+    if(img)return img;
+    img=new Image();
+    img.decoding="async";
+    img.src=src;
+    this.bySrc.set(src,img);
+    return img;
+  },
+
+  preload(paths){
+    [...new Set(paths.filter(Boolean))].forEach(src=>this.load(src));
+  },
+
+  isReady(src){
+    const img=this.get(src);
+    return !!(img&&img.complete&&img.naturalWidth>0);
+  }
+};
+
+/** HiDPI 보정. 논리 board 좌표는 그대로 990×450.
+ *  #game-scale-root 의 CSS transform:scale(fit) 과 ctx 에 fit 을 중복 적용하면
+ *  한글 글리프 종횡비가 깨질 수 있으므로, ctx 배율에는 devicePixelRatio 만 사용한다.
+ */
+let battleCanvasFitScale = 1;
+
+/**
+ * row0 스프라이트 상단 클리핑 방지용 렌더 여유(px).
+ * 논리 좌표/충돌/클릭 영역은 불변 — Canvas CSS만 위로 확장.
+ */
+const BATTLE_CANVAS_TOP_PAD = 50;
+/**
+ * approach zone(오른쪽 보드 밖 ~180px) 스프라이트용 렌더 여유.
+ * spawn/collision/BOARD_WIDTH 불변 — Canvas 가로만 오른쪽으로 확장.
+ */
+const BATTLE_CANVAS_RIGHT_PAD = 200;
+
+function getBattleCanvasPixelRatio(){
+  // CSS fit 은 #game-scale-root 가 담당. ctx/backing 에는 DPR 만 (중복 scale 금지).
+  return Math.min(window.devicePixelRatio||1,2);
+}
+
+/** DPR 균등 스케일 + TOP_PAD y 오프셋 (a===d — 스프라이트 종횡비 유지). */
+function resetBattleCanvasDrawTransform(ctx){
+  if(!ctx)return;
+  const ratio=BATTLE_CANVAS._pixelRatio||getBattleCanvasPixelRatio();
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  ctx.translate(0,BATTLE_CANVAS_TOP_PAD);
+  ctx.imageSmoothingEnabled=true;
+  if("imageSmoothingQuality" in ctx)ctx.imageSmoothingQuality="high";
+  ctx.globalAlpha=1;
+  if("filter" in ctx)ctx.filter="none";
+}
+
+/**
+ * 좀비 단어 라벨: DOM (.zombie-word-label) 전용.
+ * Canvas fillText 경로 제거됨.
+ */
+
+/** 패딩 포함 전체 클리어 (논리 board 좌표: y=-TOP … HEIGHT, x=0 … WIDTH+RIGHT). */
+function clearBattleCanvas(ctx){
+  if(!ctx)return;
+  ctx.clearRect(
+    0,
+    -BATTLE_CANVAS_TOP_PAD,
+    BOARD_WIDTH+BATTLE_CANVAS_RIGHT_PAD,
+    BOARD_HEIGHT+BATTLE_CANVAS_TOP_PAD
+  );
+}
+
+/**
+ * CSS 표시 크기와 백킹 해상도 분리 + setTransform.
+ * 백킹 width/height 는 동일 scale 로 맞춰 CSS 비균일 stretch 방지 (a===d).
+ */
+function syncBattleCanvasResolution(){
+  const canvas=BATTLE_CANVAS.el;
+  if(!canvas)return null;
+
+  let ctx=BATTLE_CANVAS.ctx;
+  if(!ctx){
+    ctx=canvas.getContext("2d",{alpha:true});
+    BATTLE_CANVAS.ctx=ctx;
+  }
+  if(!ctx)return null;
+
+  const ratio=getBattleCanvasPixelRatio();
+  const cssW=BOARD_WIDTH+BATTLE_CANVAS_RIGHT_PAD;
+  const cssH=BOARD_HEIGHT+BATTLE_CANVAS_TOP_PAD;
+  const bw=Math.max(1,Math.round(cssW*ratio));
+  // 가로 scale 과 동일한 배율로 높이를 맞춰 a/d 및 CSS stretch 일치
+  const bh=Math.max(1,Math.round(bw*(cssH/cssW)));
+  const uniform=bw/cssW;
+
+  canvas.style.width=cssW+"px";
+  canvas.style.height=cssH+"px";
+  canvas.style.left="0px";
+  canvas.style.top=(-BATTLE_CANVAS_TOP_PAD)+"px";
+
+  if(canvas.width!==bw||canvas.height!==bh||BATTLE_CANVAS._pixelRatio!==uniform){
+    canvas.width=bw;
+    canvas.height=bh;
+    BATTLE_CANVAS._pixelRatio=uniform;
+    BATTLE_CANVAS._pixelRatioX=uniform;
+    BATTLE_CANVAS._pixelRatioY=uniform;
+  }
+
+  resetBattleCanvasDrawTransform(ctx);
+  return ctx;
+}
+
+/** drawImage 정수 픽셀 보정 (흐림 완화). 회전 중이면 호출부에서 translate 후 사용. */
+function canvasDrawImage(ctx,img,x,y,w,h){
+  ctx.drawImage(
+    img,
+    Math.round(x),
+    Math.round(y),
+    Math.round(w),
+    Math.round(h)
+  );
+}
+
+/**
+ * 슬롯 안에 원본 aspect 유지(contain) + 중앙 배치.
+ * 정사각 슬롯에 납작하게 찌그러뜨리지 않음. 식물/좀비 스프라이트용.
+ */
+function canvasDrawImageContain(ctx,img,slotX,slotY,slotW,slotH){
+  if(!img||!img.complete)return;
+  const nw=img.naturalWidth||0;
+  const nh=img.naturalHeight||0;
+  if(nw<=0||nh<=0||!(slotW>0)||!(slotH>0))return;
+  const scale=Math.min(slotW/nw,slotH/nh);
+  const dw=nw*scale;
+  const dh=nh*scale;
+  const dx=slotX+(slotW-dw)*0.5;
+  const dy=slotY+(slotH-dh)*0.5;
+  ctx.drawImage(
+    img,
+    Math.round(dx),
+    Math.round(dy),
+    Math.round(dw),
+    Math.round(dh)
+  );
+}
+
+const BATTLE_CANVAS = {
+  el:null,
+  ctx:null,
+  _pixelRatio:1,
+  /** 개발용 테스트 그리드/셀 점. 기본 OFF — 일반 플레이 방해 없음 */
+  showTestGrid:false,
+  /** true: 일반 Wave 좀비 PNG를 Canvas에 그림 (라벨/HP는 DOM) */
+  useCanvasZombies:true,
+  /** true: 일반 Wave 투사체를 Canvas에 그림 (DOM element 없음) */
+  useCanvasProjectiles:true,
+  /** true: 일반 Wave 피격 VFX를 Canvas에 그림 (DOM element 없음) */
+  useCanvasHitVfx:true,
+  /** true: 일반 Wave freeze/slow 상태 비주얼을 Canvas에 그림 (DOM class/filter 없음) */
+  useCanvasStatusVfx:true,
+  /** true: 일반 Wave support VFX(고모음/원순모음/중모음)를 Canvas에 그림 */
+  useCanvasSupportVfx:true,
+  /** true: board plant PNG를 Canvas에 그림 (이름 라벨 DOM 유지) */
+  useCanvasPlants:true,
+  _wasDrawing:false,
+
+  toggleTestGrid(){
+    this.showTestGrid=!this.showTestGrid;
+    if(!this.showTestGrid&&this.ctx&&!this.useCanvasZombies&&!this.useCanvasHitVfx){
+      const ctx=syncBattleCanvasResolution();
+      if(ctx)clearBattleCanvas(ctx);
+      this._wasDrawing=false;
+    }
+    console.info(`[battle-canvas] showTestGrid=${this.showTestGrid}`);
+    return this.showTestGrid;
+  },
+
+  setUseCanvasZombies(on){
+    this.useCanvasZombies=!!on;
+    console.info(`[battle-canvas] useCanvasZombies=${this.useCanvasZombies} (다음 스폰부터 적용)`);
+    return this.useCanvasZombies;
+  },
+
+  setUseCanvasProjectiles(on){
+    this.useCanvasProjectiles=!!on;
+    console.info(`[battle-canvas] useCanvasProjectiles=${this.useCanvasProjectiles} (다음 발사부터 적용)`);
+    return this.useCanvasProjectiles;
+  },
+
+  setUseCanvasHitVfx(on){
+    this.useCanvasHitVfx=!!on;
+    if(!this.useCanvasHitVfx)clearCanvasHitEffects();
+    console.info(`[battle-canvas] useCanvasHitVfx=${this.useCanvasHitVfx}`);
+    return this.useCanvasHitVfx;
+  },
+
+  setUseCanvasStatusVfx(on){
+    this.useCanvasStatusVfx=!!on;
+    console.info(`[battle-canvas] useCanvasStatusVfx=${this.useCanvasStatusVfx}`);
+    return this.useCanvasStatusVfx;
+  },
+
+  setUseCanvasSupportVfx(on){
+    this.useCanvasSupportVfx=!!on;
+    if(!this.useCanvasSupportVfx)clearCanvasSupportVis();
+    console.info(`[battle-canvas] useCanvasSupportVfx=${this.useCanvasSupportVfx}`);
+    return this.useCanvasSupportVfx;
+  },
+
+  setUseCanvasPlants(on){
+    this.useCanvasPlants=!!on;
+    console.info(`[battle-canvas] useCanvasPlants=${this.useCanvasPlants} (다음 배치부터 적용)`);
+    return this.useCanvasPlants;
+  }
+};
+
+/** DOM `.zombie-image` (injectVisualAssetStyles)와 동일한 표시 크기 */
+const CANVAS_ZOMBIE_IMAGE_SIZE = {
+  normal:92,
+  runner:96,
+  breaker:98,
+  resilient:98,
+  bomber:98
+};
+/** DOM `.zombie-visual` left 오프셋 (−8), 기준 박스 92px */
+const CANVAS_ZOMBIE_VISUAL_BOX = 92;
+const CANVAS_ZOMBIE_VISUAL_OFFSET_X = -8;
+/**
+ * 레인 세로 중심 비율 — plant(CANVAS_PLANT_CENTER_Y_RATIO)와 동일.
+ * DOM 시절 TOP_OFFSET(+12)+VISUAL_OFFSET_Y(−4) 중복은 render y에서 제거.
+ * collision / bite / lane 판정은 zombie.row·zombie.x 만 사용(불변).
+ */
+const CANVAS_ZOMBIE_CENTER_Y_RATIO = 0.44;
+/** DOM 컨테이너 top 레거시(비-Canvas HUD). Canvas 스프라이트는 getZombieRenderY 사용 */
+const CANVAS_ZOMBIE_TOP_OFFSET = 12;
+/** DOM `.zombie-walk` duration과 맞춤 (초) */
+const CANVAS_ZOMBIE_WALK_PERIOD = {
+  normal:0.70,
+  runner:0.46,
+  breaker:1.08,
+  resilient:0.84,
+  bomber:0.76
+};
+const CANVAS_ZOMBIE_WALK_BOB_PX = 2.5;
+const CANVAS_ZOMBIE_WALK_TILT_RAD = 1.5 * Math.PI / 180;
+/** 성능 비상시 rotation만 끄기: __BATTLE_CANVAS__.walkTilt = false */
+BATTLE_CANVAS.walkTilt = true;
+
+/** Canvas bite/hit 모션 (ms). zombie.x / cell 좌표 불변 — visual만. */
+const CANVAS_BITE_ANIM_MS = 160;
+const CANVAS_BITE_LUNGE_PX = 12;
+const CANVAS_PLANT_HIT_ANIM_MS = 170;
+/** RAID shockwave lane hop — visual only (ms / peak px). cell 좌표 불변 */
+const CANVAS_SHOCKWAVE_BOUNCE_MS = 150;
+const CANVAS_SHOCKWAVE_BOUNCE_PX = 7;
+/** 소리꽃 +25 생산 본체 펄스 (ms) — idle bob과 별개, 생산 순간만 */
+const CANVAS_ENERGY_PULSE_MS = 200;
+const CANVAS_ENERGY_GLOW_MS = 150;
+/** 좀비 피격 recoil — 진행 반대(+x)로 짧게 밀림 */
+const CANVAS_HIT_RECOIL_MS = 120;
+const CANVAS_HIT_RECOIL_PX = 4;
+
+function getCanvasZombieDrawSize(enemyType){
+  return CANVAS_ZOMBIE_IMAGE_SIZE[enemyType]||CANVAS_ZOMBIE_IMAGE_SIZE.normal;
+}
+
+function getCanvasZombieWalkPeriod(enemyType){
+  return CANVAS_ZOMBIE_WALK_PERIOD[enemyType]||CANVAS_ZOMBIE_WALK_PERIOD.normal;
+}
+
+function useCanvasZombies(){
+  return !!BATTLE_CANVAS.useCanvasZombies;
+}
+
+function useCanvasProjectiles(){
+  return !!BATTLE_CANVAS.useCanvasProjectiles;
+}
+
+function useCanvasHitVfx(){
+  return !!BATTLE_CANVAS.useCanvasHitVfx;
+}
+
+function useCanvasStatusVfx(){
+  return !!BATTLE_CANVAS.useCanvasStatusVfx;
+}
+
+function useCanvasSupportVfx(){
+  return !!BATTLE_CANVAS.useCanvasSupportVfx&&!raidMode;
+}
+
+function useCanvasPlants(){
+  return !!BATTLE_CANVAS.useCanvasPlants;
+}
+
+if(typeof window!=="undefined"){
+  window.__BATTLE_CANVAS__ = BATTLE_CANVAS;
+  window.__IMAGE_CACHE__ = IMAGE_CACHE;
+  Object.defineProperty(window,"__USE_CANVAS_ZOMBIES__",{
+    get(){return BATTLE_CANVAS.useCanvasZombies;},
+    set(v){BATTLE_CANVAS.setUseCanvasZombies(v);},
+    configurable:true
+  });
+  Object.defineProperty(window,"__USE_CANVAS_PROJECTILES__",{
+    get(){return BATTLE_CANVAS.useCanvasProjectiles;},
+    set(v){BATTLE_CANVAS.setUseCanvasProjectiles(v);},
+    configurable:true
+  });
+  Object.defineProperty(window,"__USE_CANVAS_HIT_VFX__",{
+    get(){return BATTLE_CANVAS.useCanvasHitVfx;},
+    set(v){BATTLE_CANVAS.setUseCanvasHitVfx(v);},
+    configurable:true
+  });
+  Object.defineProperty(window,"__USE_CANVAS_STATUS_VFX__",{
+    get(){return BATTLE_CANVAS.useCanvasStatusVfx;},
+    set(v){BATTLE_CANVAS.setUseCanvasStatusVfx(v);},
+    configurable:true
+  });
+  Object.defineProperty(window,"__USE_CANVAS_SUPPORT_VFX__",{
+    get(){return BATTLE_CANVAS.useCanvasSupportVfx;},
+    set(v){BATTLE_CANVAS.setUseCanvasSupportVfx(v);},
+    configurable:true
+  });
+  Object.defineProperty(window,"__USE_CANVAS_PLANTS__",{
+    get(){return BATTLE_CANVAS.useCanvasPlants;},
+    set(v){BATTLE_CANVAS.setUseCanvasPlants(v);},
+    configurable:true
+  });
+  /**
+   * 개발 전용: 보드 plant HP 비율 강제 (UI 없음).
+   * 예) __debugSetPlantHpRatio(12, 0.12) → critical 점멸
+   *     __debugSetPlantHpRatio(12, 0.3)  → low 빨간 아우라
+   *     __debugSetPlantHpRatio(12, 0.55) → medium 노란 아우라
+   *     __debugSetPlantHpRatio(12, 1)    → 정상
+   */
+  window.__debugSetPlantHpRatio=function(cellIndex,ratio){
+    const cells=boardCells&&boardCells.length?boardCells:document.querySelectorAll(".game-board .cell");
+    const cell=cells[cellIndex];
+    if(!cell||cell.dataset.plant!=="true"){
+      console.warn("[debug] no plant at cell",cellIndex);
+      return false;
+    }
+    const type=cell.dataset.plantType;
+    const maxHp=PLANT_DB[type]?PLANT_DB[type].hp:1;
+    const r=Math.max(0,Math.min(1,Number(ratio)));
+    cell.dataset.plantHp=String(Math.max(1,Math.round(maxHp*r)));
+    updatePlantHPBar(cell);
+    console.info("[debug] plant",type,"hpRatio≈",r,"state=",getPlantHpVisualState(r));
+    return true;
+  };
+}
+
+/** 고모음/원순모음 시각 상태 (판정은 attackSpeedMap/shieldMap 별도). DOM class 대체. */
+const CANVAS_SUPPORT_VIS = {
+  speed:null,
+  shield:null,
+  len:0
+};
+
+function clearCanvasSupportVis(){
+  CANVAS_SUPPORT_VIS.speed=null;
+  CANVAS_SUPPORT_VIS.shield=null;
+  CANVAS_SUPPORT_VIS.len=0;
+}
+
+function ensureCanvasSupportVis(n){
+  if(CANVAS_SUPPORT_VIS.len===n&&CANVAS_SUPPORT_VIS.speed)return;
+  CANVAS_SUPPORT_VIS.speed=new Array(n).fill(false);
+  CANVAS_SUPPORT_VIS.shield=new Array(n).fill(false);
+  CANVAS_SUPPORT_VIS.len=n;
+}
+
+/** 일반 Wave 피격 VFX (DOM 없음). pause는 nowGame()으로 연동. */
+const canvasHitEffects = [];
+/** Canvas 사망 스프라이트 잔상만 (collision/target 대상 아님) */
+const deadZombieVisuals = [];
+
+function clearCanvasHitEffects(){
+  canvasHitEffects.length=0;
+}
+
+function clearCanvasDeadZombieVisuals(){
+  deadZombieVisuals.length=0;
+}
+
+function spawnCanvasHitEffect(fx){
+  canvasHitEffects.push({
+    x:fx.x||0,
+    y:fx.y||0,
+    x2:fx.x2,
+    y2:fx.y2,
+    kind:fx.kind||"proj",
+    plantType:fx.plantType||null,
+    startTime:nowGame(),
+    duration:Math.max(16,fx.duration||300),
+    isFinal:!!fx.isFinal,
+    isChain:!!fx.isChain,
+    shotIndex:fx.shotIndex,
+    heavy:!!fx.heavy,
+    text:fx.text||null
+  });
+}
+
+function countWaveHitVfxDomElements(){
+  if(!board)return 0;
+  let n=0;
+  const nodes=board.children;
+  for(let i=0;i<nodes.length;i++){
+    const el=nodes[i];
+    if(!el.classList)continue;
+    if(el.classList.contains("projectile-hit-vfx"))n++;
+    else if(el.classList.contains("hit-impact-spark"))n++;
+    else if(el.classList.contains("pierce-trail"))n++;
+  }
+  return n;
+}
+
+function mountBattleCanvas(){
+  if(!board)return null;
+
+  let canvas=BATTLE_CANVAS.el;
+  if(!canvas){
+    canvas=document.createElement("canvas");
+    canvas.id="battle-canvas";
+    canvas.className="battle-canvas";
+    canvas.setAttribute("aria-hidden","true");
+    BATTLE_CANVAS.el=canvas;
+  }
+
+  // createBoard()가 innerHTML을 비우므로 보드 재생성 후 다시 붙인다.
+  if(canvas.parentElement!==board){
+    board.appendChild(canvas);
+  }
+
+  mountBattleOverlay();
+  syncBattleCanvasResolution();
+  return canvas;
+}
+
+/**
+ * 보드와 동일 origin(990×450)의 DOM overlay.
+ * Canvas TOP_PAD overscan 은 canvas CSS top:-PAD 로만 처리 — overlay에는 미적용.
+ * game-scale-root scale 은 부모가 공유하므로 좌표에 재곱하지 않음.
+ */
+function mountBattleOverlay(){
+  if(!board)return null;
+  let overlay=document.getElementById("battle-overlay");
+  if(!overlay){
+    overlay=document.createElement("div");
+    overlay.id="battle-overlay";
+    overlay.className="battle-overlay";
+    overlay.setAttribute("aria-hidden","true");
+  }
+  if(overlay.parentElement!==board){
+    // canvas 위(라벨/HP), cells 아래가 되도록 canvas 다음에 배치
+    const canvas=BATTLE_CANVAS.el;
+    if(canvas&&canvas.parentElement===board){
+      board.insertBefore(overlay,canvas.nextSibling);
+    }else{
+      board.appendChild(overlay);
+    }
+  }
+  return overlay;
+}
+
+function getBattleOverlay(){
+  return document.getElementById("battle-overlay")||mountBattleOverlay();
+}
+
+/**
+ * Canvas sprite 와 동일한 보드 논리 좌표 (overscan/DPR/fit 미포함).
+ * DOM overlay 는 board 자식이라 CSS scale 을 부모와 공유.
+ */
+function getZombieOverlayPosition(zombie,visualOffsetX){
+  const ox=visualOffsetX!=null?visualOffsetX:(zombie.visualOffsetX||0);
+  if(zombie&&zombie.canvasRender){
+    const size=getCanvasZombieDrawSize(zombie.enemyType);
+    return {
+      x:zombie.x+ox,
+      y:getZombieRenderY(zombie,size)
+    };
+  }
+  return {
+    x:zombie.x+ox,
+    y:zombie.row*CELL_SIZE+CANVAS_ZOMBIE_TOP_OFFSET
+  };
+}
+
+/** 기존 gameLoop에 연결. plant / support / status / 라벨 / hit VFX 포함. */
+function renderBattleCanvas(){
+  const ctx=syncBattleCanvasResolution();
+  if(!ctx||!BATTLE_CANVAS.el||!BATTLE_CANVAS.el.isConnected)return;
+
+  const drawPlants=useCanvasPlants();
+  const drawSupport=useCanvasSupportVfx();
+  const drawZombies=useCanvasZombies();
+  const drawProjectiles=useCanvasProjectiles();
+  const drawStatus=drawZombies&&useCanvasStatusVfx();
+  const drawHit=useCanvasHitVfx();
+  const drawGrid=BATTLE_CANVAS.showTestGrid;
+  const hasHit=drawHit&&canvasHitEffects.length>0;
+  const hasCastCue=!!canvasGlobalCastCue;
+  const hasSupport=drawSupport&&CANVAS_SUPPORT_VIS.len>0;
+  const hasDead=drawZombies&&deadZombieVisuals.length>0;
+
+  if(!drawPlants&&!drawZombies&&!drawProjectiles&&!drawGrid&&!hasHit&&!hasCastCue&&!hasSupport&&!hasDead){
+    if(BATTLE_CANVAS._wasDrawing){
+      clearBattleCanvas(ctx);
+      BATTLE_CANVAS._wasDrawing=false;
+    }
+    return;
+  }
+
+  BATTLE_CANVAS._wasDrawing=true;
+  clearBattleCanvas(ctx);
+
+  // plant sprite → support → projectile → zombie → dead residual → status → hit → cast
+  if(drawPlants){
+    const _pt0=PERF_DIAG.enabled?perfNow():0;
+    renderCanvasPlants(ctx);
+    if(PERF_DIAG.enabled)PERF_DIAG.tPlant+=perfNow()-_pt0;
+  }
+  if(drawSupport){
+    const _sv0=PERF_DIAG.enabled?perfNow():0;
+    renderCanvasSupportVfx(ctx);
+    if(PERF_DIAG.enabled)PERF_DIAG.tSupportVfx+=perfNow()-_sv0;
+  }
+  if(drawProjectiles&&!PERF_DIAG.disableProjectileVisual){
+    renderCanvasProjectiles(ctx);
+  }
+  if(drawZombies){
+    renderCanvasZombies(ctx);
+    renderCanvasDeadZombies(ctx);
+  }
+  if(drawStatus){
+    const _st0=PERF_DIAG.enabled?perfNow():0;
+    renderCanvasStatusOverlays(ctx);
+    if(PERF_DIAG.enabled){
+      const dt=perfNow()-_st0;
+      PERF_DIAG.tStatusVfx+=dt;
+      PERF_DIAG._lastStatusVfxMs=dt;
+    }
+  }else if(PERF_DIAG.enabled){
+    PERF_DIAG._lastStatusVfxMs=0;
+  }
+  // 좀비 단어 라벨: DOM (.zombie-word-label) — Canvas fillText 미사용
+  if(drawHit){
+    const _ht0=PERF_DIAG.enabled?perfNow():0;
+    renderCanvasHitEffects(ctx);
+    if(PERF_DIAG.enabled)PERF_DIAG.tHitVfx+=perfNow()-_ht0;
+  }
+  if(hasCastCue||canvasGlobalCastCue){
+    renderCanvasGlobalCastCue(ctx);
+  }
+
+  if(drawGrid){
+    ctx.save();
+    ctx.strokeStyle="rgba(255,255,255,0.35)";
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let c=0;c<=BOARD_COLUMNS;c++){
+      const x=c*CELL_SIZE+0.5;
+      ctx.moveTo(x,0);
+      ctx.lineTo(x,BOARD_HEIGHT);
+    }
+    for(let r=0;r<=BOARD_ROWS;r++){
+      const y=r*CELL_SIZE+0.5;
+      ctx.moveTo(0,y);
+      ctx.lineTo(BOARD_WIDTH,y);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle="rgba(255,40,40,0.85)";
+    for(let r=0;r<BOARD_ROWS;r++){
+      for(let c=0;c<BOARD_COLUMNS;c++){
+        const cx=c*CELL_SIZE+CELL_SIZE/2;
+        const cy=r*CELL_SIZE+CELL_SIZE/2;
+        ctx.beginPath();
+        ctx.arc(cx,cy,2.5,0,Math.PI*2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+}
+
+/** DOM `.zombie` inject 스타일 컨테이너 너비(76px) — 라벨 중앙 정렬용 */
+const CANVAS_ZOMBIE_HUD_W = 76;
+
+/**
+ * 일반 Wave 좀비 단어는 DOM label 전용 (Canvas fillText 비활성).
+ * sprite/projectile/plant/VFX 는 Canvas 유지.
+ */
+function roundRectPath(ctx,x,y,w,h,r){
+  const rr=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+rr,y);
+  ctx.arcTo(x+w,y,x+w,y+h,rr);
+  ctx.arcTo(x+w,y+h,x,y+h,rr);
+  ctx.arcTo(x,y+h,x,y,rr);
+  ctx.arcTo(x,y,x+w,y,rr);
+  ctx.closePath();
+}
+
+/** Canvas 단어 라벨 비활성 — DOM `.zombie-word-label` 사용 */
+function renderCanvasZombieLabels(_ctx){
+  // no-op
+}
+/** progress 0→1: alpha fade + scale grow (DOM keyframe 대체, filter 없음) */
+function canvasHitEaseOut(t){
+  return 1-Math.pow(1-Math.max(0,Math.min(1,t)),2);
+}
+
+function drawCanvasProjHitShape(ctx,fx,progress){
+  const kind=PROJECTILE_HIT_VFX_KIND[fx.plantType]||"default";
+  const alpha=1-progress;
+  const grow=0.4+canvasHitEaseOut(progress)*0.95;
+  const x=fx.x;
+  const y=fx.y;
+
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.globalAlpha=Math.max(0,alpha);
+
+  switch(kind){
+    case "labial":{
+      const s=18*grow;
+      ctx.strokeStyle="rgba(255,150,195,0.85)";
+      ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,0,s/2,0,Math.PI*2);ctx.stroke();
+      break;
+    }
+    case "alveolar":{
+      const s=14*grow;
+      ctx.strokeStyle="rgba(120,235,100,0.9)";
+      ctx.lineWidth=2.2;
+      ctx.rotate(progress*0.3);
+      ctx.beginPath();
+      ctx.moveTo(-s/2,-s/2);ctx.lineTo(s/2,s/2);
+      ctx.moveTo(s/2,-s/2);ctx.lineTo(-s/2,s/2);
+      ctx.stroke();
+      break;
+    }
+    case "nasal":{
+      const final=fx.isFinal||fx.shotIndex===2;
+      if(final){
+        const s=22*grow;
+        ctx.strokeStyle="rgba(100,255,140,0.9)";
+        ctx.lineWidth=2;
+        ctx.fillStyle="rgba(140,255,170,0.25)";
+        ctx.beginPath();ctx.arc(0,0,s/2,0,Math.PI*2);ctx.fill();ctx.stroke();
+      }else{
+        const s=(fx.shotIndex===1?10:8)*grow;
+        ctx.fillStyle="rgba(140,255,165,0.95)";
+        ctx.beginPath();ctx.arc(0,0,s/2,0,Math.PI*2);ctx.fill();
+      }
+      break;
+    }
+    case "plosive":{
+      const s=26*grow;
+      ctx.strokeStyle="rgba(235,155,75,0.88)";
+      ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(0,0,s/2,0,Math.PI*2);ctx.stroke();
+      const core=14*(1-progress*0.6);
+      ctx.globalAlpha=alpha*0.7;
+      ctx.fillStyle="rgba(255,200,120,0.55)";
+      ctx.beginPath();ctx.arc(0,0,core/2,0,Math.PI*2);ctx.fill();
+      break;
+    }
+    case "affricate":{
+      const s=(fx.isFinal?28:20)*grow;
+      const g=ctx.createRadialGradient(0,0,0,0,0,s/2);
+      g.addColorStop(0,"rgba(255,220,80,0.75)");
+      g.addColorStop(0.45,"rgba(255,180,40,0.35)");
+      g.addColorStop(1,"rgba(255,180,40,0)");
+      ctx.fillStyle=g;
+      ctx.beginPath();ctx.arc(0,0,s/2,0,Math.PI*2);ctx.fill();
+      break;
+    }
+    case "liquid":{
+      const w=(fx.isChain?18:24)*grow;
+      const h=(fx.isChain?10:12)*grow;
+      ctx.strokeStyle=fx.isChain?"rgba(140,230,80,0.65)":"rgba(165,255,90,0.75)";
+      ctx.lineWidth=2;
+      ctx.beginPath();ctx.ellipse(0,0,w/2,h/2,0,0,Math.PI*2);ctx.stroke();
+      if(fx.isChain){
+        ctx.globalAlpha=alpha*0.7;
+        ctx.strokeStyle="rgba(165,255,90,0.5)";
+        ctx.lineWidth=2;
+        ctx.beginPath();
+        ctx.moveTo(-14*grow,0);ctx.lineTo(14*grow,0);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "fricative":{
+      const w=22*grow;
+      ctx.strokeStyle="rgba(255,80,70,0.9)";
+      ctx.lineWidth=3;
+      ctx.rotate(-0.14+progress*0.24);
+      ctx.beginPath();ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);ctx.stroke();
+      ctx.globalAlpha=alpha*0.75;
+      ctx.strokeStyle="rgba(255,140,120,0.7)";
+      ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(-8*grow,3);ctx.lineTo(8*grow,-2);ctx.stroke();
+      break;
+    }
+    case "velar":{
+      const w=36*grow;
+      ctx.strokeStyle="rgba(220,200,255,0.95)";
+      ctx.lineWidth=4;
+      ctx.beginPath();ctx.moveTo(-w/2,0);ctx.lineTo(w/2,0);ctx.stroke();
+      ctx.fillStyle="rgba(255,255,255,0.85)";
+      ctx.beginPath();ctx.arc(0,0,4*grow,0,Math.PI*2);ctx.fill();
+      break;
+    }
+    case "palatal":{
+      const s=10*grow;
+      ctx.fillStyle="rgba(200,170,255,0.9)";
+      ctx.beginPath();ctx.arc(0,0,s/2,0,Math.PI*2);ctx.fill();
+      break;
+    }
+    case "glottal":{
+      const s=30*grow;
+      ctx.strokeStyle="rgba(135,90,255,0.9)";
+      ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(0,0,s/2,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle="rgba(255,255,255,0.75)";
+      ctx.beginPath();ctx.arc(0,0,6*grow,0,Math.PI*2);ctx.fill();
+      break;
+    }
+    default:{
+      const s=14*grow;
+      ctx.strokeStyle="rgba(200,200,200,0.8)";
+      ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,0,s/2,0,Math.PI*2);ctx.stroke();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function drawCanvasSparkHit(ctx,fx,progress){
+  // 노란 타원 glow 제거 — 짧은 크림색 파편/선 burst만
+  const heavy=!!fx.heavy;
+  const alpha=progress<0.22?1:1-((progress-0.22)/0.78);
+  const ease=canvasHitEaseOut(progress);
+  const count=heavy?5:4;
+  const seed=fx.seed||0;
+  const reach=(heavy?11:8)*(0.25+ease*0.95);
+  ctx.save();
+  ctx.translate(fx.x,fx.y);
+  ctx.globalAlpha=Math.max(0,alpha);
+  ctx.strokeStyle="rgba(255,250,240,0.92)";
+  ctx.fillStyle="rgba(255,252,245,0.88)";
+  ctx.lineWidth=1.35;
+  ctx.lineCap="round";
+  for(let i=0;i<count;i++){
+    const ang=seed+(i/count)*Math.PI*2;
+    const x1=Math.cos(ang)*1.5;
+    const y1=Math.sin(ang)*1.5;
+    const x2=Math.cos(ang)*reach;
+    const y2=Math.sin(ang)*reach;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x2,y2,1.05,0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawCanvasTextBurst(ctx,fx,progress){
+  const alpha=1-progress;
+  const y=fx.y-progress*18;
+  const scale=0.85+canvasHitEaseOut(progress)*0.35;
+  ctx.save();
+  ctx.translate(fx.x,y);
+  ctx.scale(scale,scale);
+  ctx.globalAlpha=Math.max(0,alpha);
+  ctx.font='28px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  ctx.fillText(fx.text||"💥",0,0);
+  ctx.restore();
+}
+
+function drawCanvasPierceTrail(ctx,fx,progress){
+  const x1=fx.x;
+  const y1=fx.y;
+  const x2=fx.x2!=null?fx.x2:fx.x+80;
+  const alpha=1-progress;
+  ctx.save();
+  ctx.globalAlpha=Math.max(0,alpha*0.9);
+  ctx.strokeStyle="rgba(255,255,255,0.85)";
+  ctx.lineWidth=5;
+  ctx.lineCap="round";
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y1);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 중모음 heal-flash DOM 대체 (canvasHitEffects kind:"heal") */
+function drawCanvasHealBurst(ctx,fx,progress){
+  const alpha=progress<0.18?progress/0.18:1-((progress-0.18)/0.82);
+  const scale=0.72+canvasHitEaseOut(progress)*0.45;
+  const rise=progress*22;
+  ctx.save();
+  ctx.globalAlpha=Math.max(0,alpha)*0.55;
+  ctx.fillStyle="rgba(100,255,130,0.22)";
+  ctx.fillRect(fx.x-CELL_SIZE/2,fx.y-CELL_SIZE/2-rise*0.15,CELL_SIZE,CELL_SIZE);
+  ctx.globalAlpha=Math.max(0,alpha)*0.85;
+  ctx.translate(fx.x,fx.y-rise);
+  ctx.scale(scale,scale);
+  ctx.fillStyle="rgba(70,235,100,0.85)";
+  ctx.font='900 52px "Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  ctx.fillText("✚",0,0);
+  ctx.restore();
+}
+
+/** 원순모음 방패 실루엣 (CSS clip-path 근사, filter/glow 없음) */
+const CANVAS_SHIELD_PTS = [
+  [0,-47],[33.4,-33.8],[33.4,2.8],[24.6,20.7],
+  [0,47],[-24.6,20.7],[-33.4,2.8],[-33.4,-33.8]
+];
+
+/** CSS `.plant-image`: 92×92, top:-4px. support VFX와 동일 중심(cell 44%). */
+const CANVAS_PLANT_SIZE = 92;
+const CANVAS_PLANT_CENTER_Y_RATIO = 0.44;
+/** idle bob 진폭(px). base 셀 좌표와 분리된 visual offset만 사용. */
+const CANVAS_PLANT_BOB_PX = 2;
+/** idle 주기(ms). nowGame() 모듈로 연산해 Date.now 정밀도 계단을 피함. */
+const CANVAS_PLANT_IDLE_PERIOD_MS = 1800;
+/** idle scale 진폭 → 약 0.99~1.01 */
+const CANVAS_PLANT_IDLE_SCALE_AMP = 0.01;
+/**
+ * plant HP 시각 구간 — updatePlantHPBar / CSS(.plant-hp-*)와 동일 값 유지
+ * medium ≤70%, low ≤40%, critical ≤15%
+ */
+const PLANT_HP_VIS_MEDIUM = 0.70;
+const PLANT_HP_VIS_LOW = 0.40;
+const PLANT_HP_VIS_CRITICAL = 0.15;
+
+function getCanvasPlantCenter(row,column){
+  return {
+    cx:column*CELL_SIZE+CELL_SIZE/2,
+    cy:row*CELL_SIZE+CELL_SIZE*CANVAS_PLANT_CENTER_Y_RATIO
+  };
+}
+
+/**
+ * Canvas plant 이름표 — #battle-overlay 보드 논리 좌표 (좀비 HUD와 동일 space).
+ * labelY = plantCenterY + spriteH/2 + GAP
+ * 셀 로컬 top / zoom 재매핑 / bob·hit·pulse 금지 (이중 적용·row 누적 방지).
+ */
+const CANVAS_PLANT_LABEL_GAP_Y = -13;
+
+function getCanvasPlantLabelBoardY(plantCenterY){
+  return plantCenterY + CANVAS_PLANT_SIZE/2 + CANVAS_PLANT_LABEL_GAP_Y;
+}
+
+function unmountCanvasPlantNameLabel(cell){
+  if(!cell)return;
+  const el=cell._plantNameEl;
+  if(el&&el.parentElement)el.remove();
+  cell._plantNameEl=null;
+}
+
+function mountCanvasPlantNameLabel(cell,type){
+  unmountCanvasPlantNameLabel(cell);
+  const overlay=getBattleOverlay();
+  if(!overlay||!cell)return null;
+
+  const index=boardCells.indexOf(cell);
+  if(index<0)return null;
+  const row=(index/BOARD_COLUMNS)|0;
+  const column=index%BOARD_COLUMNS;
+  const {cx,cy}=getCanvasPlantCenter(row,column);
+  const labelY=getCanvasPlantLabelBoardY(cy);
+
+  const name=document.createElement("div");
+  name.className="plant-name plant-name-canvas-overlay";
+  name.textContent=getPlantDisplayName(type);
+  name.setAttribute("aria-hidden","true");
+  // 보드 논리 좌표 1회만 — TOP_PAD/fit/zoom 재곱 없음 (zombie overlay와 동일)
+  name.style.setProperty("left", cx+"px", "important");
+  name.style.setProperty("top", labelY+"px", "important");
+  name.style.setProperty("bottom", "auto", "important");
+  name.style.setProperty("right", "auto", "important");
+  name.style.setProperty("transform", "translateX(-50%)", "important");
+
+  overlay.appendChild(name);
+  cell._plantNameEl=name;
+
+  console.info(
+    `[plant-label] row=${row} col=${column} plantBaseY=${cy.toFixed(2)} `+
+    `spriteBottom=${(cy+CANVAS_PLANT_SIZE/2).toFixed(2)} overlayY=${labelY.toFixed(2)} finalLabelY=${labelY.toFixed(2)}`
+  );
+  return name;
+}
+
+/** plant HP 상태 시각 (Canvas only). DOM/CSS filter 미사용. */
+function getPlantHpVisualState(ratio){
+  if(ratio<=PLANT_HP_VIS_CRITICAL)return "critical";
+  if(ratio<=PLANT_HP_VIS_LOW)return "low";
+  if(ratio<=PLANT_HP_VIS_MEDIUM)return "medium";
+  return "ok";
+}
+
+/**
+ * HP glow 스프라이트 캐시 (offscreen radialGradient → 1회 bake).
+ * 매 프레임 createRadialGradient 금지 — drawImage만 재사용.
+ */
+const PLANT_HP_AURA_SPRITES = {
+  size:0,
+  medium:null,
+  low:null,
+  criticalTint:null
+};
+
+function bakePlantHpAuraSprite(kind,pixelSize){
+  const c=document.createElement("canvas");
+  c.width=pixelSize;
+  c.height=pixelSize;
+  const g=c.getContext("2d");
+  if(!g)return null;
+  const cx=pixelSize*0.5;
+  const cy=pixelSize*0.5+2;
+  const r=pixelSize*0.5;
+  const grad=g.createRadialGradient(cx,cy,0,cx,cy,r);
+  if(kind==="medium"){
+    // 금색 soft glow — 멀리서도 분명, 원판 경계 없음
+    grad.addColorStop(0,"rgba(255,212,75,0.42)");
+    grad.addColorStop(0.18,"rgba(255,200,55,0.36)");
+    grad.addColorStop(0.48,"rgba(255,190,42,0.24)");
+    grad.addColorStop(0.62,"rgba(255,180,35,0.14)");
+    grad.addColorStop(0.82,"rgba(255,170,25,0.04)");
+    grad.addColorStop(1,"rgba(255,165,20,0)");
+  }else if(kind==="low"){
+    grad.addColorStop(0,"rgba(255,60,32,0.45)");
+    grad.addColorStop(0.18,"rgba(255,48,26,0.38)");
+    grad.addColorStop(0.48,"rgba(255,38,20,0.26)");
+    grad.addColorStop(0.62,"rgba(255,30,16,0.15)");
+    grad.addColorStop(0.82,"rgba(255,22,12,0.04)");
+    grad.addColorStop(1,"rgba(255,18,10,0)");
+  }else{
+    // criticalTint: soft red pulse overlay
+    grad.addColorStop(0,"rgba(255,55,35,0.42)");
+    grad.addColorStop(0.3,"rgba(255,40,28,0.20)");
+    grad.addColorStop(0.6,"rgba(255,30,20,0.07)");
+    grad.addColorStop(1,"rgba(255,25,15,0)");
+  }
+  g.fillStyle=grad;
+  g.fillRect(0,0,pixelSize,pixelSize);
+  return c;
+}
+
+function ensurePlantHpAuraSprites(plantSize){
+  // 이전(+40) 대비 ~12% 확대 → sprite 바깥 ~22~26px
+  const pixelSize=Math.max(8,Math.round(plantSize+48));
+  if(
+    PLANT_HP_AURA_SPRITES.size===pixelSize&&
+    PLANT_HP_AURA_SPRITES.medium&&
+    PLANT_HP_AURA_SPRITES.low&&
+    PLANT_HP_AURA_SPRITES.criticalTint
+  ){
+    return PLANT_HP_AURA_SPRITES;
+  }
+  PLANT_HP_AURA_SPRITES.size=pixelSize;
+  PLANT_HP_AURA_SPRITES.medium=bakePlantHpAuraSprite("medium",pixelSize);
+  PLANT_HP_AURA_SPRITES.low=bakePlantHpAuraSprite("low",pixelSize);
+  PLANT_HP_AURA_SPRITES.criticalTint=bakePlantHpAuraSprite("criticalTint",pixelSize);
+  return PLANT_HP_AURA_SPRITES;
+}
+
+/**
+ * HP aura — plant sprite 뒤 soft glow (cached radial).
+ * ctx는 plant 중심 translate 상태.
+ */
+function drawCanvasPlantHpAura(ctx,size,state,pulse){
+  if(state==="ok")return;
+  const sprites=ensurePlantHpAuraSprites(size);
+  const sprite=state==="medium"?sprites.medium:sprites.low;
+  if(!sprite)return;
+  const w=sprites.size;
+  const h=sprites.size;
+  ctx.save();
+  // critical: 아래 붉은 aura도 pulse로 더 보이게
+  ctx.globalAlpha=state==="critical"?0.92+0.18*pulse:1;
+  ctx.drawImage(sprite,-w/2,-h/2+1,w,h);
+  ctx.restore();
+}
+
+/** critical: soft red tint pulse — 식물 전체를 불투명 적색으로 덮지 않음 */
+function drawCanvasPlantHpCriticalOverlay(ctx,size,pulse){
+  const sprites=ensurePlantHpAuraSprites(size);
+  const sprite=sprites.criticalTint;
+  if(!sprite)return;
+  const w=Math.round(sprites.size*0.78);
+  const h=w;
+  ctx.save();
+  // 빠르게 나타났다 사라지는 tint (peak ~0.55)
+  ctx.globalAlpha=0.08+0.47*pulse;
+  ctx.drawImage(sprite,-w/2,-h/2,w,h);
+  ctx.restore();
+}
+
+function renderCanvasPlants(ctx){
+  const cells=boardCells;
+  if(!cells||!cells.length)return;
+  const now=nowGame();
+  const period=CANVAS_PLANT_IDLE_PERIOD_MS;
+  // 큰 epoch ms를 sin 인자에 직접 넣지 않음(float ULP → 계단 움직임).
+  const idleCycle=((now%period)+period)%period/period*Math.PI*2;
+  // critical 점멸 ~2.5Hz (기존 CSS 0.75s 주기보다 약간 빠르게)
+  const critPulse=0.5+0.5*Math.sin(((now%400)+400)%400/400*Math.PI*2);
+
+  for(let index=0;index<cells.length;index++){
+    const cell=cells[index];
+    if(!cell||cell.dataset.plant!=="true")continue;
+    const type=cell.dataset.plantType;
+    if(!type)continue;
+
+    const path=getPlantImage(type);
+    const img=path?(IMAGE_CACHE.get(path)||IMAGE_CACHE.load(path)):null;
+    if(!img||!img.complete||img.naturalWidth<=0)continue;
+
+    const row=Math.floor(index/BOARD_COLUMNS);
+    const column=index%BOARD_COLUMNS;
+    const {cx,cy}=getCanvasPlantCenter(row,column);
+
+    // 셀별 고정 phase — 동시 동기 움직임 방지
+    const phase=cell._plantIdlePhase!=null?cell._plantIdlePhase:(cell._plantIdlePhase=(index%7)*0.9);
+    let bobY=Math.sin(idleCycle+phase)*CANVAS_PLANT_BOB_PX;
+    let recoilX=0;
+    // idle scale은 float 유지(정수화 금지)
+    let scale=1+Math.sin(idleCycle+phase+1.1)*CANVAS_PLANT_IDLE_SCALE_AMP;
+
+    if(cell._plantFireUntil>now){
+      const left=cell._plantFireUntil-now;
+      const dur=cell._plantFireDuration||260;
+      const t=1-Math.max(0,Math.min(1,left/dur));
+      // 짧은 좌측 recoil + 미세 scale
+      const kick=cell._plantFireRecoil||4;
+      recoilX=-kick*(t<0.35?t/0.35:1-(t-0.35)/0.65);
+      scale=1+(t<0.4?0.04*(1-t/0.4):-0.02);
+      bobY*=0.35;
+    }
+
+    // 생산 펄스 / 피격 / shockwave bounce — 독립 modifier, 최종 offset만 합성
+    const energyPulse=getPlantEnergyPulseVisual(cell,now);
+    const hit=getPlantHitVisual(cell,now);
+    const swBounce=getPlantShockwaveBounceVisual(cell,now);
+    recoilX+=hit.ox;
+    bobY+=hit.oy+swBounce.oy;
+    const pulseScale=energyPulse.scale||1;
+    const scaleX=scale*pulseScale*(hit.scaleX||1);
+    const scaleY=scale*pulseScale*(hit.scaleY||1);
+
+    const maxHp=PLANT_DB[type]?PLANT_DB[type].hp:1;
+    const hp=Number(cell.dataset.plantHp);
+    const ratio=maxHp>0?hp/maxHp:1;
+    const hpState=getPlantHpVisualState(ratio);
+
+    // base = 안정 정수 좌표 / bob·recoil·scale = float visual offset
+    const baseX=Math.round(cx);
+    const baseY=Math.round(cy);
+    ctx.save();
+    ctx.translate(baseX,baseY);
+    ctx.translate(recoilX,bobY);
+    if(scaleX!==1||scaleY!==1)ctx.scale(scaleX,scaleY);
+
+    // 1) HP aura (behind sprite)
+    if(hpState!=="ok"){
+      drawCanvasPlantHpAura(ctx,CANVAS_PLANT_SIZE,hpState,critPulse);
+    }
+
+    // 1b) 소리꽃 생산 glow — HP aura와 별개, 짧은 soft warm
+    if(energyPulse.glowAlpha>0){
+      drawCanvasEnergyPulseGlow(ctx,CANVAS_PLANT_SIZE,energyPulse.glowAlpha);
+    }
+
+    // 2) plant sprite
+    ctx.globalAlpha=1;
+    canvasDrawImageContain(ctx,img,-CANVAS_PLANT_SIZE/2,-CANVAS_PLANT_SIZE/2,CANVAS_PLANT_SIZE,CANVAS_PLANT_SIZE);
+
+    // 3) critical red overlay (above sprite, below support VFX / DOM name)
+    if(hpState==="critical"){
+      drawCanvasPlantHpCriticalOverlay(ctx,CANVAS_PLANT_SIZE,critPulse);
+    }
+
+    ctx.restore();
+  }
+}
+
+function renderCanvasSupportVfx(ctx){
+  const speed=CANVAS_SUPPORT_VIS.speed;
+  const shield=CANVAS_SUPPORT_VIS.shield;
+  if(!speed||!shield)return;
+  const now=nowGame();
+  const pulse=0.5+0.5*Math.sin(now/420);
+  const n=CANVAS_SUPPORT_VIS.len;
+
+  for(let index=0;index<n;index++){
+    if(!shield[index]&&!speed[index])continue;
+    const row=Math.floor(index/BOARD_COLUMNS);
+    const column=index%BOARD_COLUMNS;
+    const {cx,cy}=getCanvasPlantCenter(row,column);
+
+    if(shield[index]){
+      const scale=0.98+0.07*pulse;
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.scale(scale,scale);
+      ctx.globalAlpha=0.72+0.18*pulse;
+      ctx.beginPath();
+      for(let p=0;p<CANVAS_SHIELD_PTS.length;p++){
+        const pt=CANVAS_SHIELD_PTS[p];
+        if(p===0)ctx.moveTo(pt[0],pt[1]);
+        else ctx.lineTo(pt[0],pt[1]);
+      }
+      ctx.closePath();
+      ctx.fillStyle="rgba(150,90,255,0.18)";
+      ctx.fill();
+      ctx.strokeStyle="rgba(145,80,255,0.95)";
+      ctx.lineWidth=4;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if(speed[index]){
+      const t=(now%700)/700;
+      const ox=-4+t*9;
+      const a=t<0.5?0.35+t*1.3:0.35+(1-t)*1.3;
+      ctx.save();
+      ctx.globalAlpha=Math.max(0.35,Math.min(1,a));
+      ctx.fillStyle="#45a8ff";
+      ctx.font='900 22px "Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+      ctx.textAlign="left";
+      ctx.textBaseline="middle";
+      ctx.fillText("»",cx+CELL_SIZE*0.28+ox,row*CELL_SIZE+28);
+      ctx.restore();
+    }
+  }
+}
+
+function renderCanvasHitEffects(ctx){
+  const now=nowGame();
+  let write=0;
+  for(let i=0;i<canvasHitEffects.length;i++){
+    const fx=canvasHitEffects[i];
+    const elapsed=now-fx.startTime;
+    if(elapsed>=fx.duration)continue;
+    canvasHitEffects[write++]=fx;
+    const progress=elapsed/fx.duration;
+    if(fx.kind==="spark")drawCanvasSparkHit(ctx,fx,progress);
+    else if(fx.kind==="text")drawCanvasTextBurst(ctx,fx,progress);
+    else if(fx.kind==="pierce")drawCanvasPierceTrail(ctx,fx,progress);
+    else if(fx.kind==="heal")drawCanvasHealBurst(ctx,fx,progress);
+    else drawCanvasProjHitShape(ctx,fx,progress);
+  }
+  canvasHitEffects.length=write;
+}
+
+function renderCanvasProjectiles(ctx){
+  for(let i=0;i<activeProjectiles.length;i++){
+    const p=activeProjectiles[i];
+    if(!p||!p.canvasRender)continue;
+    const path=p.imagePath||(p.config&&p.config.path);
+    const img=IMAGE_CACHE.get(path)||IMAGE_CACHE.load(path);
+    if(!img||!img.complete||img.naturalWidth<=0)continue;
+
+    const scale=p.config&&p.config.scale?Number(p.config.scale):1;
+    const size=(p.config&&p.config.size?p.config.size:34)*scale;
+    // DOM: left/top = 중심 + translate(-50%,-50%)
+    const sizeR=Math.round(size);
+    canvasDrawImage(ctx,img,p.x-size/2,p.y-size/2,sizeR,sizeR);
+  }
+}
+
+/**
+ * Canvas 좀비 스프라이트 top Y (논리 board 좌표, bob 제외).
+ * 모든 row: row*CELL_SIZE + CELL_SIZE*centerRatio − size/2
+ * collision/lane/bite 는 이 값을 쓰지 않음.
+ */
+function getZombieRenderY(zombie,size){
+  const row=zombie&&zombie.row!=null?zombie.row:0;
+  const drawSize=size!=null?size:getCanvasZombieDrawSize(zombie&&zombie.enemyType);
+  const cy=row*CELL_SIZE+CELL_SIZE*CANVAS_ZOMBIE_CENTER_Y_RATIO;
+  return cy-drawSize/2;
+}
+
+/**
+ * Canvas 좀비 피격 recoil — 이동 반대(+x)로 3~5px, 100~140ms.
+ * zombie.x 불변.
+ */
+function getZombieHitRecoilVisual(z,now){
+  if(!z||!z.hitRecoilStart)return {ox:0};
+  const dur=z.hitRecoilDuration||CANVAS_HIT_RECOIL_MS;
+  const t=(now-z.hitRecoilStart)/dur;
+  if(t>=1||t<0){
+    z.hitRecoilStart=0;
+    return {ox:0};
+  }
+  let peak;
+  if(t<0.32){
+    const u=t/0.32;
+    peak=1-Math.pow(1-u,2);
+  }else{
+    const u=(t-0.32)/0.68;
+    peak=1-u*u;
+  }
+  return {ox:CANVAS_HIT_RECOIL_PX*peak};
+}
+
+/**
+ * Canvas 좀비 bite 들이밀기 — 빠른 전진·짧은 정점·빠른 복귀.
+ * zombie.x 불변. pause는 nowGame()으로 정지.
+ */
+function getZombieBiteVisual(z,now){
+  if(!z||!z.biteAnimStart)return {ox:0,scaleX:1,scaleY:1};
+  const dur=z.biteAnimDuration||CANVAS_BITE_ANIM_MS;
+  const t=(now-z.biteAnimStart)/dur;
+  if(t>=1||t<0){
+    z.biteAnimStart=0;
+    return {ox:0,scaleX:1,scaleY:1};
+  }
+  // 0~0.28 빠르게 들이밀기, 짧은 정점, 이후 복귀 (ease-out / ease-in)
+  let peak;
+  if(t<0.28){
+    const u=t/0.28;
+    peak=1-Math.pow(1-u,3); // ease-out cubic → 타격감
+  }else if(t<0.40){
+    peak=1;
+  }else{
+    const u=(t-0.40)/0.60;
+    peak=1-u*u; // 빠른 복귀
+  }
+  return {
+    ox:-CANVAS_BITE_LUNGE_PX*peak,
+    scaleX:1+0.04*peak,
+    scaleY:1-0.04*peak
+  };
+}
+
+/**
+ * 소리꽃 +25 생산 순간 본체 펄스 (render-only).
+ * cell 논리 좌표·HP·피격 상태와 독립.
+ */
+function getPlantEnergyPulseVisual(cell,now){
+  if(!cell||!cell._energyPulseStart)return {scale:1,glowAlpha:0};
+  const t=(now-cell._energyPulseStart)/CANVAS_ENERGY_PULSE_MS;
+  if(t>=1||t<0){
+    cell._energyPulseStart=0;
+    return {scale:1,glowAlpha:0};
+  }
+  // 1.00 → ~1.10 → 1.02 → 1.00 (짧은 생산 반응)
+  let scale;
+  if(t<0.32){
+    const u=t/0.32;
+    const e=1-Math.pow(1-u,2);
+    scale=1+0.10*e;
+  }else if(t<0.52){
+    const u=(t-0.32)/0.20;
+    const e=u*u*(3-2*u);
+    scale=1.10+(1.02-1.10)*e;
+  }else{
+    const u=(t-0.52)/0.48;
+    const e=1-Math.pow(1-u,2);
+    scale=1.02+(1-1.02)*e;
+  }
+  let glowAlpha=0;
+  const tg=(now-cell._energyPulseStart)/CANVAS_ENERGY_GLOW_MS;
+  if(tg>=0&&tg<1){
+    // 초반 peak → 빠른 fade (밝은 원판 금지, alpha 낮게)
+    glowAlpha=tg<0.28?0.20*(tg/0.28):0.20*(1-(tg-0.28)/0.72);
+  }
+  return {scale,glowAlpha};
+}
+
+/** 생산 순간 soft warm glow — HP 노란 aura와 구분 (작고 짧은 soft blob) */
+function drawCanvasEnergyPulseGlow(ctx,size,alpha){
+  if(!(alpha>0))return;
+  const r=size*0.28;
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  const g=ctx.createRadialGradient(0,0,0,0,0,r);
+  g.addColorStop(0,"rgba(232,198,120,0.55)");
+  g.addColorStop(0.55,"rgba(210,170,90,0.18)");
+  g.addColorStop(1,"rgba(210,170,90,0)");
+  ctx.fillStyle=g;
+  ctx.beginPath();
+  ctx.arc(0,0,r,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Canvas 식물 피격 — 눌림 + 튕김 + 2~3회 흔들림.
+ * aura/sprite 동일 offset. cell 논리 좌표 불변.
+ */
+function getPlantHitVisual(cell,now){
+  if(!cell||!cell._plantHitAnimStart)return {ox:0,oy:0,scaleX:1,scaleY:1};
+  const dur=cell._plantHitAnimDuration||CANVAS_PLANT_HIT_ANIM_MS;
+  const t=(now-cell._plantHitAnimStart)/dur;
+  if(t>=1||t<0){
+    cell._plantHitAnimStart=0;
+    return {ox:0,oy:0,scaleX:1,scaleY:1};
+  }
+  // 초반 squash peak, 이후 감쇠하며 2.5회 흔들림
+  let squash;
+  if(t<0.22){
+    const u=t/0.22;
+    squash=1-Math.pow(1-u,2);
+  }else{
+    const u=(t-0.22)/0.78;
+    squash=Math.max(0,1-u)*Math.pow(1-u,0.6);
+  }
+  const shake=Math.sin(t*Math.PI*5.2)*3*(1-t)*(1-t);
+  const recoil=-5.5*squash;
+  return {
+    ox:recoil+shake,
+    oy:1.5*squash,
+    scaleX:1+0.05*squash,
+    scaleY:1-0.055*squash
+  };
+}
+
+function triggerCanvasPlantHitAnim(cell){
+  if(!cell)return;
+  cell._plantHitAnimStart=nowGame();
+  cell._plantHitAnimDuration=CANVAS_PLANT_HIT_ANIM_MS;
+}
+
+/**
+ * RAID shockwave lane bounce — 위로 짧게 튀었다 복귀.
+ * aura/sprite 동일 oy. cell 논리 좌표·다른 anim 상태 불변.
+ */
+function getPlantShockwaveBounceVisual(cell,now){
+  if(!cell||!cell._shockwaveBounceStart)return {oy:0};
+  const t=(now-cell._shockwaveBounceStart)/CANVAS_SHOCKWAVE_BOUNCE_MS;
+  if(t<0)return {oy:0};
+  if(t>=1){
+    cell._shockwaveBounceStart=0;
+    return {oy:0};
+  }
+  // 빠른 상승(~35%) → 짧은 정점 → 부드럽게 착지
+  let amp;
+  if(t<0.35){
+    const u=t/0.35;
+    amp=1-Math.pow(1-u,2);
+  }else{
+    const u=(t-0.35)/0.65;
+    amp=Math.pow(1-u,1.55);
+  }
+  return {oy:-CANVAS_SHOCKWAVE_BOUNCE_PX*amp};
+}
+
+/**
+ * Canvas 좀비 스프라이트 자세(위치/걷기). status/label과 공유.
+ * filter 없이 좌표만 — 파란 사각 DOM outline 회피.
+ */
+function getCanvasZombieDrawPose(z,now){
+  const size=getCanvasZombieDrawSize(z.enemyType);
+  const bite=getZombieBiteVisual(z,now);
+  const recoil=getZombieHitRecoilVisual(z,now);
+  const offsetX=(z.visualOffsetX||0)+bite.ox+recoil.ox;
+  const boxPad=(size-CANVAS_ZOMBIE_VISUAL_BOX)/2;
+  const baseX=z.x+offsetX+CANVAS_ZOMBIE_VISUAL_OFFSET_X-boxPad;
+  const baseY=getZombieRenderY(z,size);
+
+  const frozen=z.frozenUntil>now;
+  const slowed=z.slowedUntil>now;
+  const hitFlash=z.hitFlashUntil>now;
+  let hitFlashAlpha=0;
+  if(hitFlash){
+    const left=Math.max(0,z.hitFlashUntil-now);
+    const flashDur=z.hitFlashDuration||75;
+    hitFlashAlpha=Math.max(0,Math.min(1,left/flashDur));
+  }
+
+  let bobY=0;
+  let tilt=0;
+  if(!frozen){
+    let period=z.walkPeriod||getCanvasZombieWalkPeriod(z.enemyType);
+    if(slowed)period*=2;
+    const phase=(z.walkPhase||0)+(now/1000)*(Math.PI*2)/period;
+    bobY=Math.sin(phase)*CANVAS_ZOMBIE_WALK_BOB_PX;
+    if(BATTLE_CANVAS.walkTilt!==false)tilt=Math.sin(phase)*CANVAS_ZOMBIE_WALK_TILT_RAD;
+  }
+
+  return {
+    size,
+    cx:baseX+size/2,
+    cy:baseY+size/2+bobY,
+    scaleX:bite.scaleX,
+    scaleY:bite.scaleY,
+    tilt,
+    frozen,
+    slowed,
+    hitFlash,
+    hitFlashAlpha
+  };
+}
+
+function renderCanvasZombies(ctx){
+  const now=nowGame();
+  const list=[];
+  for(let i=0;i<zombies.length;i++){
+    const z=zombies[i];
+    if(!z||!z.alive||!z.canvasRender)continue;
+    list.push(z);
+  }
+  list.sort((a,b)=>a.row-b.row||a.x-b.x);
+
+  for(let i=0;i<list.length;i++){
+    const z=list[i];
+    const src=z.imagePath||getZombieImage(z.enemyType);
+    const img=IMAGE_CACHE.get(src)||IMAGE_CACHE.load(src);
+    if(!img||!img.complete||img.naturalWidth<=0)continue;
+
+    const pose=getCanvasZombieDrawPose(z,now);
+    const size=pose.size;
+
+    ctx.save();
+    ctx.translate(Math.round(pose.cx),Math.round(pose.cy));
+    if(pose.tilt)ctx.rotate(pose.tilt);
+    if((pose.scaleX&&pose.scaleX!==1)||(pose.scaleY&&pose.scaleY!==1)){
+      ctx.scale(pose.scaleX||1,pose.scaleY||1);
+    }
+    // status는 renderCanvasStatusOverlays에서 — 여기선 스프라이트(+짧은 hit flash)만
+    canvasDrawImageContain(ctx,img,-size/2,-size/2,size,size);
+    if(pose.hitFlash&&pose.hitFlashAlpha>0){
+      // 아주 짧은 연한 크림 tint — 완전 흰색 flash 금지
+      ctx.globalAlpha=0.10+0.16*pose.hitFlashAlpha;
+      ctx.fillStyle="rgba(255,250,238,0.55)";
+      ctx.beginPath();
+      ctx.ellipse(0,0,size*0.30,size*0.36,0,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+/** Canvas 사망 잔상 — gameplay zombie와 분리. nowGame()으로 pause 연동. */
+const CANVAS_DEATH_ANIM_MS = 280;
+const CANVAS_DEATH_ANIM_BOMBER_MS = 240;
+
+function spawnCanvasZombieDeathVisual(zombie){
+  if(!zombie||!zombie.canvasRender)return;
+  const bomber=zombie.enemyType==="bomber";
+  deadZombieVisuals.push({
+    enemyType:zombie.enemyType||"normal",
+    imagePath:zombie.imagePath||getZombieImage(zombie.enemyType),
+    x:zombie.x,
+    row:zombie.row|0,
+    visualOffsetX:zombie.visualOffsetX||0,
+    startTime:nowGame(),
+    duration:bomber?CANVAS_DEATH_ANIM_BOMBER_MS:CANVAS_DEATH_ANIM_MS,
+    bomber
+  });
+  if(deadZombieVisuals.length>24){
+    deadZombieVisuals.splice(0,deadZombieVisuals.length-24);
+  }
+}
+
+function renderCanvasDeadZombies(ctx){
+  if(!deadZombieVisuals.length)return;
+  const now=nowGame();
+  let write=0;
+  for(let i=0;i<deadZombieVisuals.length;i++){
+    const d=deadZombieVisuals[i];
+    const t=(now-d.startTime)/d.duration;
+    if(t>=1||t<0)continue;
+    deadZombieVisuals[write++]=d;
+
+    const src=d.imagePath||getZombieImage(d.enemyType);
+    const img=IMAGE_CACHE.get(src)||IMAGE_CACHE.load(src);
+    if(!img||!img.complete||img.naturalWidth<=0)continue;
+
+    const size=getCanvasZombieDrawSize(d.enemyType);
+    const boxPad=(size-CANVAS_ZOMBIE_VISUAL_BOX)/2;
+    const baseX=d.x+(d.visualOffsetX||0)+CANVAS_ZOMBIE_VISUAL_OFFSET_X-boxPad;
+    const baseY=getZombieRenderY({row:d.row},size);
+    const cx=baseX+size/2;
+    const cy=baseY+size/2;
+
+    // ease-in: 초반 유지 후 빠르게 퇴장
+    const ease=t*t;
+    let ox,oy,rot,scale,alpha;
+    if(d.bomber){
+      // 살짝 팽창 → 축소/fade (기존 bomberDeathPop 느낌, 폭발 로직 불변)
+      const puff=t<0.35?1+0.10*(t/0.35):1.10-0.28*((t-0.35)/0.65);
+      ox=2*ease;
+      oy=5*ease;
+      rot=(Math.PI/180)*5*ease;
+      scale=puff;
+      alpha=1-Math.pow(t,1.35);
+    }else{
+      ox=5*ease;          // 진행 반대(우측)로 살짝
+      oy=6*ease;          // 아래로 4~8px
+      rot=(Math.PI/180)*6*ease;
+      scale=0.96-0.06*ease; // 0.96 → ~0.90
+      alpha=1-ease;
+    }
+
+    ctx.save();
+    ctx.globalAlpha=Math.max(0,Math.min(1,alpha));
+    ctx.translate(Math.round(cx+ox),Math.round(cy+oy));
+    ctx.rotate(rot);
+    ctx.scale(scale,scale);
+    canvasDrawImageContain(ctx,img,-size/2,-size/2,size,size);
+    ctx.restore();
+  }
+  deadZombieVisuals.length=write;
+}
+
+/**
+ * freeze 상태 오버레이만. zombie.frozenUntil 참조.
+ * 후설모음 slow는 전역 cast wave cue로만 표현 (좀비별 tint/이모지 없음).
+ * ctx.filter·사각 outline·DOM class 없음.
+ */
+function renderCanvasStatusOverlays(ctx){
+  const now=nowGame();
+  for(let i=0;i<zombies.length;i++){
+    const z=zombies[i];
+    if(!z||!z.alive||!z.canvasRender)continue;
+    if(!(z.frozenUntil>now))continue;
+
+    const pose=getCanvasZombieDrawPose(z,now);
+    const size=pose.size;
+    const pulse=0.5+0.5*Math.sin(now/380);
+
+    ctx.save();
+    ctx.translate(pose.cx,pose.cy);
+    if(pose.tilt)ctx.rotate(pose.tilt);
+
+    // 반투명 푸른 tint — 스프라이트 영역 타원만 (박스/outline 금지)
+    ctx.globalAlpha=0.22+0.06*pulse;
+    ctx.fillStyle="rgba(110,205,255,0.55)";
+    ctx.beginPath();
+    ctx.ellipse(0,0,size*0.34,size*0.40,0,0,Math.PI*2);
+    ctx.fill();
+    // 아주 약한 frost highlight
+    ctx.globalAlpha=0.12+0.05*pulse;
+    ctx.fillStyle="rgba(220,245,255,0.7)";
+    ctx.beginPath();
+    ctx.ellipse(-size*0.08,-size*0.12,size*0.16,size*0.12,0,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+function countWaveStatusClassDomElements(){
+  if(!board)return 0;
+  return board.querySelectorAll(".zombie.frozen, .zombie.slowed").length;
+}
+
+function countWaveSupportVfxDomElements(){
+  if(!board)return 0;
+  return board.querySelectorAll(
+    ".plant.speed-buffed, .plant.shielded, .plant.support-active, .cell.heal-flash"
+  ).length;
+}
+
+function countBoardPlantImageDomElements(){
+  if(!board)return 0;
+  return board.querySelectorAll(".plant-image").length;
+}
+
 function preloadGameImages(){
   const paths=[
     ...Object.values(PLANT_IMAGES),
@@ -596,11 +2188,7 @@ function preloadGameImages(){
     ...Object.values(PROJECTILE_IMAGES),
     BOSS_IMAGE
   ];
-
-  [...new Set(paths)].forEach(src=>{
-    const img=new Image();
-    img.src=src;
-  });
+  IMAGE_CACHE.preload(paths);
 }
 
 
@@ -1219,6 +2807,7 @@ function updateGameFitScale(){
   const availH=Math.max(1, window.innerHeight);
   const scale=Math.min(availW / baseWidth, availH / baseHeight, 1);
   GAME_FIT.scale=scale;
+  battleCanvasFitScale=scale;
 
   root.style.width=baseWidth+"px";
   root.style.height=baseHeight+"px";
@@ -1231,6 +2820,9 @@ function updateGameFitScale(){
   shell.style.height=fittedH+"px";
   shell.style.left=Math.max(0, Math.round((availW - fittedW) / 2))+"px";
   shell.style.top=Math.max(0, Math.round((availH - fittedH) / 2))+"px";
+
+  // fit scale 변경 시 canvas 백킹 해상도 재동기화 (CSS transform blur 우회)
+  syncBattleCanvasResolution();
 }
 
 function initGameFitScale(){
@@ -1367,7 +2959,34 @@ const PROJECTILE_HIT_VFX_CLASS={
   "후음":"proj-hit-glottal"
 };
 
+const PROJECTILE_HIT_VFX_KIND={
+  "양순음":"labial",
+  "치조음":"alveolar",
+  "비음":"nasal",
+  "파열음":"plosive",
+  "유음":"liquid",
+  "마찰음":"fricative",
+  "연구개음":"velar",
+  "파찰음":"affricate",
+  "경구개음":"palatal",
+  "후음":"glottal"
+};
+
 function createProjectileHitVfx(plantType,x,y,options={}){
+  // 일반 Wave Canvas 피격 VFX — FINAL BOSS(raid)는 기존 DOM 유지
+  if(useCanvasHitVfx()&&!raidMode){
+    spawnCanvasHitEffect({
+      kind:"proj",
+      plantType,
+      x,y,
+      duration:options.duration??420,
+      isFinal:!!options.isFinal,
+      isChain:!!options.isChain,
+      shotIndex:options.shotIndex
+    });
+    return;
+  }
+
   const effect=document.createElement("div");
   const typeClass=PROJECTILE_HIT_VFX_CLASS[plantType]||"proj-hit-default";
   effect.classList.add("projectile-hit-vfx",typeClass);
@@ -1383,6 +3002,20 @@ function createProjectileHitVfx(plantType,x,y,options={}){
   setTimeout(()=>{
     if(effect.parentElement) effect.remove();
   },duration);
+}
+
+/** 비음 splash 등 피격 연계 텍스트 버스트 (status freeze/slow DOM createEffect와 분리) */
+function createWaveHitTextEffect(text,x,y,className,duration=500){
+  if(useCanvasHitVfx()&&!raidMode){
+    spawnCanvasHitEffect({
+      kind:"text",
+      text,
+      x,y,
+      duration
+    });
+    return;
+  }
+  createEffect(text,x,y,className,duration);
 }
 
 function createProjectileElement(plantType,config,extraClass=""){
@@ -1411,27 +3044,36 @@ function createProjectileElement(plantType,config,extraClass=""){
 // 식물 종류별로 속도/크기를 다르게 하고, 움직이는 좀비를 일정 속도로 추적한다.
 // 목표에 실제로 닿은 순간에만 onHit 콜백을 실행한다.
 // 개별 rAF 없이 activeProjectiles + gameLoop 일괄 업데이트.
+// Canvas 모드: DOM element 없이 논리 좌표만 갱신 → renderBattleCanvas에서 draw.
 function createFlyingProjectile(row,column,target,plantType,onHit,options={}){
   const baseConfig=PROJECTILE_CONFIG[plantType];
   if(!baseConfig||!target||!target.alive)return;
 
   const config={...baseConfig,...options};
-  const element=createProjectileElement(plantType,config);
+  const canvasRender=useCanvasProjectiles();
+  const imagePath=config.path;
+  IMAGE_CACHE.load(imagePath);
 
   const startX=column*CELL_SIZE+(config.startOffsetX??PROJECTILE_START_OFFSET_X);
   const startY=row*CELL_SIZE+(config.startOffsetY??PROJECTILE_START_OFFSET_Y);
 
-  element.style.left=startX+"px";
-  element.style.top=startY+"px";
-  element.style.width=config.size+"px";
-  element.style.height=config.size+"px";
-  element.style.transform="translate(-50%,-50%)";
-  element.style.filter=config.glow||"none";
-
-  board.appendChild(element);
+  let element=null;
+  if(!canvasRender){
+    element=createProjectileElement(plantType,config);
+    element.style.left=startX+"px";
+    element.style.top=startY+"px";
+    element.style.width=config.size+"px";
+    element.style.height=config.size+"px";
+    element.style.transform="translate(-50%,-50%)";
+    element.style.filter=config.glow||"none";
+    board.appendChild(element);
+  }
 
   activeProjectiles.push({
     element,
+    canvasRender,
+    plantType,
+    imagePath,
     target,
     onHit,
     config,
@@ -1449,21 +3091,43 @@ function clearActiveProjectiles(){
     if(el&&el.parentElement)el.remove();
   }
   activeProjectiles.length=0;
+  clearCanvasHitEffects();
+  clearCanvasDeadZombieVisuals();
+  clearCanvasGlobalCastCue();
+  clearCanvasSupportVis();
+}
+
+function countWaveProjectileDomElements(){
+  if(!board)return 0;
+  let n=0;
+  const nodes=board.children;
+  for(let i=0;i<nodes.length;i++){
+    const el=nodes[i];
+    if(el.classList&&el.classList.contains("flying-projectile")&&!el.classList.contains("raid-flying-projectile")){
+      n++;
+    }
+  }
+  return n;
 }
 
 /** @returns {boolean} true면 다음 프레임에도 유지 */
 function stepActiveProjectile(p,currentTime){
   const target=p.target;
   const element=p.element;
+  const canvasRender=!!p.canvasRender;
 
-  if(
-    !target||
-    !target.alive||
-    !target.element||
-    !target.element.parentElement
-  ){
+  if(!target||!target.alive){
     if(element&&element.parentElement)element.remove();
     return false;
+  }
+
+  // DOM 투사체: 기존처럼 타겟 element가 보드에 있어야 함
+  // Canvas 투사체: 논리 alive만 사용 (좀비 HUD DOM과 분리)
+  if(!canvasRender){
+    if(!target.element||!target.element.parentElement){
+      if(element&&element.parentElement)element.remove();
+      return false;
+    }
   }
 
   if(p.lastFrameTime===null){
@@ -1482,11 +3146,11 @@ function stepActiveProjectile(p,currentTime){
   const step=p.speed*delta;
 
   if(distance<=Math.max(p.hitDistance,step)){
-    if(!PERF_DIAG.disableProjectileVisual){
+    if(!canvasRender&&element&&!PERF_DIAG.disableProjectileVisual){
       element.style.left=targetX+"px";
       element.style.top=targetY+"px";
     }
-    if(element.parentElement)element.remove();
+    if(element&&element.parentElement)element.remove();
     if(target.alive&&typeof p.onHit==="function")p.onHit(target);
     return false;
   }
@@ -1496,7 +3160,7 @@ function stepActiveProjectile(p,currentTime){
     p.y+=(dy/distance)*step;
   }
 
-  if(!PERF_DIAG.disableProjectileVisual){
+  if(!canvasRender&&element&&!PERF_DIAG.disableProjectileVisual){
     element.style.left=p.x+"px";
     element.style.top=p.y+"px";
   }
@@ -1528,6 +3192,7 @@ function updateActiveProjectiles(currentTime){
     if(n>PERF_DIAG.maxProjectiles)PERF_DIAG.maxProjectiles=n;
     PERF_DIAG.projectileSamples++;
     PERF_DIAG.projectileSum+=n;
+    PERF_DIAG.projectileDomSum+=countWaveProjectileDomElements();
   }
 }
 
@@ -1622,7 +3287,7 @@ function createRaidFlyingProjectile(row,column,plantType,onHit,options={}){
 
 function createDamageNumber(zombie,damage,extraClass=""){
   // 일반 Wave(W1~W9): floating damage number DOM 미생성 (판정/HP는 damageZombie에서 유지).
-  // FINAL BOSS 숫자는 createRaidDamageNumber() 전용 경로 — 여기로 들어오지 않음.
+  // FINAL BOSS 본체 숫자는 createRaidDamageNumber() 전용 (비활성 stub).
   if(!raidMode)return;
   if(!zombie||!zombie.element) return;
   const number=document.createElement("div"); number.classList.add("damage-number");
@@ -1648,12 +3313,169 @@ function createHealNumber(index,amount){
 function createPierceTrail(row,column,targets){
   if(!targets.length) return;
   const startX=column*CELL_SIZE+60, endX=targets[targets.length-1].x+35;
+  if(useCanvasHitVfx()&&!raidMode){
+    spawnCanvasHitEffect({
+      kind:"pierce",
+      x:startX,
+      y:row*CELL_SIZE+45,
+      x2:Math.max(startX+30,endX),
+      duration:400
+    });
+    return;
+  }
   const trail=document.createElement("div"); trail.classList.add("pierce-trail");
   trail.style.left=startX+"px"; trail.style.top=(row*CELL_SIZE+45)+"px"; trail.style.width=Math.max(30,endX-startX)+"px";
   board.appendChild(trail); setTimeout(()=>trail.remove(),400);
 }
 function createGlobalFreezeScreen(){const e=document.createElement("div");e.classList.add("global-freeze-screen");e.textContent="❄ 전설모음 발동! ❄";board.appendChild(e);setTimeout(()=>e.remove(),950);}
-function createGlobalSlowScreen(){const e=document.createElement("div");e.classList.add("global-slow-screen");e.textContent="🐌 후설모음 발동! 🐌";board.appendChild(e);setTimeout(()=>e.remove(),950);}
+
+/**
+ * 후설모음 전역 cast VFX — Canvas 파동 1개 + 발동 텍스트 (DOM·좀비별 visual 없음).
+ * 파동 ~420ms, 텍스트 ~600ms. 기존 main render loop에서만 draw.
+ */
+let canvasGlobalCastCue=null;
+
+const BACK_VOWEL_CAST_TEXT = "후설모음 발동!";
+const BACK_VOWEL_CAST_TEXT_MS = 600;
+const BACK_VOWEL_CAST_FONT =
+  '700 26px "SeoulNamsanGame","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+
+function spawnBackVowelGlobalWaveCue(durationMs=420){
+  const waveDuration=Math.max(16,durationMs|0);
+  canvasGlobalCastCue={
+    kind:"backVowelWave",
+    startTime:nowGame(),
+    waveDuration,
+    textDuration:BACK_VOWEL_CAST_TEXT_MS,
+    duration:Math.max(waveDuration,BACK_VOWEL_CAST_TEXT_MS),
+    dir:Math.random()<0.5?1:-1,
+    text:BACK_VOWEL_CAST_TEXT
+  };
+}
+
+function clearCanvasGlobalCastCue(){
+  canvasGlobalCastCue=null;
+}
+
+function renderCanvasGlobalCastCue(ctx){
+  const cue=canvasGlobalCastCue;
+  if(!cue)return;
+  const elapsed=nowGame()-cue.startTime;
+  if(elapsed>=cue.duration){
+    canvasGlobalCastCue=null;
+    return;
+  }
+
+  const waveDuration=cue.waveDuration||cue.duration;
+  if(elapsed<waveDuration){
+    const t=elapsed/waveDuration;
+    let alpha;
+    if(t<0.12)alpha=t/0.12;
+    else if(t>0.72)alpha=1-(t-0.72)/0.28;
+    else alpha=1;
+    alpha=Math.max(0,Math.min(1,alpha));
+
+    const dir=cue.dir||1;
+    const travel=dir>0?t:1-t;
+    const baseX=travel*(BOARD_WIDTH+120)-60;
+    const colors=[
+      "rgba(170,210,255,",
+      "rgba(140,190,245,",
+      "rgba(120,175,230,"
+    ];
+
+    ctx.save();
+    for(let i=0;i<3;i++){
+      const lag=i*22*dir;
+      const x=baseX-lag;
+      const lineAlpha=alpha*(0.42-i*0.09);
+      if(lineAlpha<=0.01)continue;
+      ctx.globalAlpha=lineAlpha;
+      ctx.strokeStyle=colors[i]+"0.95)";
+      ctx.lineWidth=2.2-i*0.35;
+      ctx.beginPath();
+      const step=10;
+      for(let y=0;y<=BOARD_HEIGHT;y+=step){
+        const wx=x
+          +Math.sin(y*0.038+t*5.5+i*1.1)*14
+          +Math.sin(y*0.017+i)*7;
+        if(y===0)ctx.moveTo(wx,y);
+        else ctx.lineTo(wx,y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  const textDuration=cue.textDuration||BACK_VOWEL_CAST_TEXT_MS;
+  if(elapsed<textDuration&&cue.text){
+    const tt=elapsed/textDuration;
+    let textAlpha;
+    if(tt<0.12)textAlpha=tt/0.12;
+    else if(tt>0.72)textAlpha=1-(tt-0.72)/0.28;
+    else textAlpha=1;
+    textAlpha=Math.max(0,Math.min(1,textAlpha));
+
+    ctx.save();
+    ctx.globalAlpha=textAlpha*0.96;
+    ctx.font=BACK_VOWEL_CAST_FONT;
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    const tx=BOARD_WIDTH/2;
+    const ty=Math.round(BOARD_HEIGHT*0.20);
+    ctx.lineWidth=3;
+    ctx.strokeStyle="rgba(20,32,52,0.72)";
+    ctx.strokeText(cue.text,tx,ty);
+    ctx.fillStyle="rgba(236,246,255,0.98)";
+    ctx.fillText(cue.text,tx,ty);
+    ctx.restore();
+  }
+}
+
+/** 후설모음 발동 frame spike 진단 (500ms). 콘솔에 avg/max frame·statusVfx ms 출력 */
+function beginSlowCastPerfProbe(zombieCount,meta){
+  if(!PERF_DIAG.enabled)return;
+  PERF_DIAG.slowCastProbe={
+    active:true,
+    startedAt:perfNow(),
+    until:perfNow()+500,
+    zombieCount:zombieCount|0,
+    castDom:meta&&meta.castDom!=null?meta.castDom:0,
+    frames:[]
+  };
+  console.info(
+    `[perf-diag] 후설모음 cast probe start | zombies=${zombieCount} | `+
+    `castDom=${PERF_DIAG.slowCastProbe.castDom} | canvasStatus=${useCanvasStatusVfx()?"ON":"OFF"} | 500ms`
+  );
+}
+
+function noteSlowCastProbeFrame(frameMs){
+  const p=PERF_DIAG.slowCastProbe;
+  if(!p||!p.active)return;
+  p.frames.push({
+    t:perfNow()-p.startedAt,
+    frame:frameMs,
+    statusVfx:PERF_DIAG._lastStatusVfxMs||0
+  });
+  if(perfNow()<p.until)return;
+
+  const frames=p.frames;
+  const n=Math.max(1,frames.length);
+  let sum=0,max=0,svSum=0,svMax=0;
+  for(let i=0;i<frames.length;i++){
+    const f=frames[i].frame;
+    const s=frames[i].statusVfx;
+    sum+=f;if(f>max)max=f;
+    svSum+=s;if(s>svMax)svMax=s;
+  }
+  const first=frames[0]?frames[0].frame:0;
+  console.info(
+    `[perf-diag] 후설모음 cast probe done | zombies=${p.zombieCount} | castDom=${p.castDom} | samples=${frames.length} | `+
+    `castFrame=${first.toFixed(2)}ms | frame avg=${(sum/n).toFixed(2)}ms max=${max.toFixed(2)}ms | `+
+    `statusVfx avg=${(svSum/n).toFixed(2)}ms max=${svMax.toFixed(2)}ms`
+  );
+  p.active=false;
+}
 
 function applyPlantCellColor(cell,type){
   cell.classList.remove("consonant-cell","vowel-cell","energy-cell");
@@ -1670,6 +3492,21 @@ function createPlantExitGhost(cell,plant,refund=false,exitClass=""){
   const row=Math.floor(index/BOARD_COLUMNS);
   const column=index%BOARD_COLUMNS;
   const ghost=plant.cloneNode(true);
+  const type=cell.dataset.plantType;
+
+  // Canvas plant는 img가 없으므로 퇴장 고스트에만 임시 이미지 삽입
+  if(plant.classList.contains("plant-canvas-hud")&&type){
+    const visual=ghost.querySelector(".plant-visual");
+    const path=getPlantImage(type);
+    if(visual&&path&&!ghost.querySelector(".plant-image")){
+      const img=document.createElement("img");
+      img.className="plant-image";
+      img.src=path;
+      img.alt="";
+      img.draggable=false;
+      visual.appendChild(img);
+    }
+  }
 
   ghost.classList.remove(
     "plant-hp-medium",
@@ -1683,7 +3520,8 @@ function createPlantExitGhost(cell,plant,refund=false,exitClass=""){
     "raid-boss-hit",
     "energy-producing",
     "raid-opening-shake",
-    "raid-shockwave-hop"
+    "raid-shockwave-hop",
+    "plant-canvas-hud"
   );
 
   const exitMode=refund
@@ -1751,6 +3589,12 @@ function removePlantFromCell(cell,refund=false,options={}){
     "energy-cell",
     "heal-flash"
   );
+  cell._plantFireUntil=0;
+  cell._plantIdlePhase=undefined;
+  cell._plantHitAnimStart=0;
+  cell._energyPulseStart=0;
+  cell._shockwaveBounceStart=0;
+  unmountCanvasPlantNameLabel(cell);
 }
 function recordPlantPlacement(type){if(!tutorialMode) plantPlacementCounts[type]=(plantPlacementCounts[type]||0)+1;}
 const PLANT_IDLE_MOTION_CLASS = {
@@ -1779,10 +3623,23 @@ function placePlant(cell,type){
   applyPlantCellColor(cell,type);
 
   const plant=document.createElement("div");
+  const canvasPlant=useCanvasPlants();
   plant.classList.add("plant", PLANT_IDLE_MOTION_CLASS[type] || "plant-idle-default");
+  if(canvasPlant)plant.classList.add("plant-canvas-hud");
 
   const imagePath=getPlantImage(type);
-  plant.innerHTML=`
+  if(imagePath)IMAGE_CACHE.load(imagePath);
+
+  if(canvasPlant){
+    // PNG는 Canvas — plant-visual은 소리꽃 VFX 호스트
+    // 이름표는 #battle-overlay 보드 좌표 (셀 로컬 top 금지 → row 누적 오차 방지)
+    plant.innerHTML=`
+  <div class="plant-visual" aria-hidden="true"></div>
+`;
+    cell._plantIdlePhase=Math.random()*Math.PI*2;
+    cell._plantFireUntil=0;
+  }else{
+    plant.innerHTML=`
   <div class="plant-visual">
     <div class="plant-idle">
       ${imagePath ? `
@@ -1794,17 +3651,19 @@ function placePlant(cell,type){
   <div class="plant-name">${getPlantDisplayName(type)}</div>
 `;
 
-  const plantImage=plant.querySelector(".plant-image");
-  if(plantImage){
-    plantImage.addEventListener("error",()=>{
-      plantImage.style.display="none";
-      const fallback=plant.querySelector(".plant-image-fallback");
-      if(fallback) fallback.classList.add("visible");
-      console.warn(`식물 이미지 파일을 찾지 못했습니다: ${imagePath}`);
-    },{once:true});
+    const plantImage=plant.querySelector(".plant-image");
+    if(plantImage){
+      plantImage.addEventListener("error",()=>{
+        plantImage.style.display="none";
+        const fallback=plant.querySelector(".plant-image-fallback");
+        if(fallback) fallback.classList.add("visible");
+        console.warn(`식물 이미지 파일을 찾지 못했습니다: ${imagePath}`);
+      },{once:true});
+    }
   }
 
   cell.appendChild(plant); recordPlantPlacement(type);
+  if(canvasPlant)mountCanvasPlantNameLabel(cell,type);
   if(tutorialMode&&type==="에너지식물"&&!tutorialEnergyBonusGiven){
     tutorialEnergyBonusGiven=true;
     setTimeout(()=>{if(!tutorialMode)return;changeEnergy(75);createEffect("소리씨앗 +75",75,25,"heal-effect",900);
@@ -1854,6 +3713,8 @@ function createBoard(){
     mountRaidBossHud(raidBoss.hud);
   }
   boardCells=Array.from(board.querySelectorAll(".cell"));
+  mountBattleCanvas();
+  mountBattleOverlay();
 }
 
 function getWordFeatures(wordData){
@@ -1879,68 +3740,129 @@ function createZombie(wordData,baseZombieHP,baseSpeed,enemyType="normal"){
   const actualHP=Math.round(baseZombieHP*enemyData.hpMultiplier);
   const actualSpeed=baseSpeed*enemyData.speedMultiplier;
   const imagePath=getZombieImage(enemyType);
+  const canvasRender=useCanvasZombies();
+
+  IMAGE_CACHE.load(imagePath);
 
   const element=document.createElement("div");
   element.classList.add("zombie",`zombie-${enemyType}`);
-  element.innerHTML=`
-    <div class="zombie-word-label">
-      <span class="zombie-type-badge">${enemyData.icon}</span>
-      <span class="zombie-word-text">${wordData.word}</span>
-    </div>
-    <div class="zombie-visual">
-      <div class="zombie-walk">
-        <img src="${imagePath}" alt="${enemyData.name} 좀비" class="zombie-image" draggable="false">
-        <div class="zombie-image-fallback" aria-hidden="true">${enemyData.icon}</div>
+  if(canvasRender){
+    // 이미지는 Canvas — 단어 라벨+HP만 DOM (한글은 DOM으로 선명 표시)
+    element.classList.add("zombie-canvas-hud");
+    element.innerHTML=`
+      <div class="zombie-word-label">
+        <span class="zombie-type-badge">${enemyData.icon||""}</span>
+        <span class="zombie-word-text">${wordData.word}</span>
       </div>
-    </div>
-    <div class="hp-bar">
-      <div class="hp-fill zombie-hp-fill" style="width:100%;"></div>
-    </div>
-  `;
+      <div class="hp-bar">
+        <div class="hp-fill zombie-hp-fill" style="width:100%;"></div>
+      </div>
+    `;
+  }else{
+    element.innerHTML=`
+      <div class="zombie-word-label">
+        <span class="zombie-type-badge">${enemyData.icon}</span>
+        <span class="zombie-word-text">${wordData.word}</span>
+      </div>
+      <div class="zombie-visual">
+        <div class="zombie-walk">
+          <img src="${imagePath}" alt="${enemyData.name} 좀비" class="zombie-image" draggable="false">
+          <div class="zombie-image-fallback" aria-hidden="true">${enemyData.icon}</div>
+        </div>
+      </div>
+      <div class="hp-bar">
+        <div class="hp-fill zombie-hp-fill" style="width:100%;"></div>
+      </div>
+    `;
 
-  const zombieImage=element.querySelector(".zombie-image");
-  if(zombieImage){
-    zombieImage.addEventListener("error",()=>{
-      zombieImage.style.display="none";
-      const fallback=element.querySelector(".zombie-image-fallback");
-      if(fallback) fallback.classList.add("visible");
-      console.warn(`좀비 이미지 파일을 찾지 못했습니다: ${imagePath}`);
-    },{once:true});
+    const zombieImage=element.querySelector(".zombie-image");
+    if(zombieImage){
+      zombieImage.addEventListener("error",()=>{
+        zombieImage.style.display="none";
+        const fallback=element.querySelector(".zombie-image-fallback");
+        if(fallback) fallback.classList.add("visible");
+        console.warn(`좀비 이미지 파일을 찾지 못했습니다: ${imagePath}`);
+      },{once:true});
+    }
   }
 
   const wordText=element.querySelector(".zombie-word-text");
-  if(wordText)wordText.style.transition="filter 0.12s linear, opacity 0.12s linear";
+  const wordLabel=element.querySelector(".zombie-word-label");
+  if(wordText)wordText.style.transition="none";
 
-  const zombie={wordData,enemyType,enemyName:enemyData.name,features:getWordFeatures(wordData),hp:actualHP,maxHp:actualHP,alive:true,exploded:false,row,x:BOARD_WIDTH+ZOMBIE_APPROACH_DISTANCE,baseSpeed:actualSpeed,biteDamage:enemyData.biteDamage,statusDurationMultiplier:enemyData.statusDurationMultiplier,lastBiteTime:0,lastUpdateTime:nowGame(),frozenUntil:0,slowedUntil:0,slowMultiplier:1,dotEndTime:0,dotNextTick:0,dotTickInterval:0,dotDamage:0,element,wordTextEl:wordText,approachBlurStep:null};
-  zombies.push(zombie);board.appendChild(element);updateZombiePosition(zombie);updateZombieApproachAppearance(zombie);
+  let initialBlurStep=0;
+  {
+    const x0=BOARD_WIDTH+ZOMBIE_APPROACH_DISTANCE;
+    if(x0>BOARD_WIDTH){
+      const ratio=Math.min(1,(x0-BOARD_WIDTH)/ZOMBIE_APPROACH_DISTANCE);
+      initialBlurStep=Math.round(ratio*4);
+    }
+  }
+
+  const zombie={
+    wordData,enemyType,enemyName:enemyData.name,features:getWordFeatures(wordData),
+    hp:actualHP,maxHp:actualHP,alive:true,exploded:false,row,
+    x:BOARD_WIDTH+ZOMBIE_APPROACH_DISTANCE,baseSpeed:actualSpeed,
+    biteDamage:enemyData.biteDamage,statusDurationMultiplier:enemyData.statusDurationMultiplier,
+    lastBiteTime:0,lastUpdateTime:nowGame(),
+    frozenUntil:0,slowedUntil:0,slowMultiplier:1,
+    dotEndTime:0,dotNextTick:0,dotTickInterval:0,dotDamage:0,
+    element,wordTextEl:wordText,wordLabelEl:wordLabel,approachBlurStep:initialBlurStep,
+    typeBadge:enemyData.icon||"",
+    labelOffsetY:canvasRender?-18:-14,
+    canvasRender,imagePath,visualOffsetX:0,hitFlashUntil:0,
+    walkPhase:Math.random()*Math.PI*2,
+    walkPeriod:getCanvasZombieWalkPeriod(enemyType),
+    _domPosX:null,_domPosY:null,_domPosAt:0,_domVisOx:null
+  };
+  zombies.push(zombie);
+  if(canvasRender){
+    const overlay=getBattleOverlay();
+    (overlay||board).appendChild(element);
+  }else{
+    board.appendChild(element);
+  }
+  updateZombiePosition(zombie,0,true);
+  applyZombieWordLabelBlur(zombie,initialBlurStep);
 }
-/** 접근 blur를 0~4단계로만 갱신 (매 프레임 style 쓰기를 줄임). 선명해지는 의미는 유지. */
+/** 접근 blur 단계별 px (DOM 라벨 텍스트만). sprite Canvas 무관. */
+const DOM_WORD_APPROACH_BLUR_PX = [0,1,2,4,4];
+
+function applyZombieWordLabelBlur(zombie,step){
+  if(!zombie)return;
+  const text=zombie.wordTextEl||(zombie.wordTextEl=zombie.element&&zombie.element.querySelector(".zombie-word-text"));
+  if(!text)return;
+  const s=Math.max(0,Math.min(4,step|0));
+  const px=DOM_WORD_APPROACH_BLUR_PX[s];
+  if(zombie._domBlurPx===px)return;
+  zombie._domBlurPx=px;
+  if(px<=0){
+    text.style.filter="none";
+    text.style.opacity="1";
+  }else{
+    text.style.filter="blur("+px+"px)";
+    text.style.opacity=String(Math.max(0.45,1-0.12*s));
+  }
+}
+
+/** 접근 blur 단계(0~4). 단계 변경 시에만 DOM word label style 갱신.
+ *  스프라이트 alpha/visibility/filter 는 절대 건드리지 않음 — Canvas는 항상 draw.
+ */
 function updateZombieApproachAppearance(zombie){
   if(PERF_DIAG.enabled)PERF_DIAG.calls.updateZombieApproachAppearance++;
   if(PERF_DIAG.disableZombieApproachAppearance)return;
-  if(!zombie||!zombie.element)return;
-  const text=zombie.wordTextEl||(zombie.wordTextEl=zombie.element.querySelector(".zombie-word-text"));
-  if(!text)return;
+  if(!zombie)return;
 
-  if(zombie.x<=BOARD_WIDTH){
-    if(zombie.approachBlurStep!==0){
-      text.style.filter="blur(0px)";
-      text.style.opacity="1";
-      zombie.approachBlurStep=0;
-    }
-    return;
+  let step=0;
+  if(zombie.x>BOARD_WIDTH){
+    const outsideDistance=Math.max(0,zombie.x-BOARD_WIDTH);
+    const ratio=Math.min(1,outsideDistance/ZOMBIE_APPROACH_DISTANCE);
+    step=Math.round(ratio*4);
   }
-
-  const outsideDistance=Math.max(0,zombie.x-BOARD_WIDTH);
-  const ratio=Math.min(1,outsideDistance/ZOMBIE_APPROACH_DISTANCE);
-  const step=Math.round(ratio*4);
 
   if(zombie.approachBlurStep===step)return;
   zombie.approachBlurStep=step;
-
-  const t=step/4;
-  text.style.filter=`blur(${(MAX_APPROACH_BLUR*t).toFixed(2)}px)`;
-  text.style.opacity=(1-0.35*t).toFixed(2);
+  applyZombieWordLabelBlur(zombie,step);
 }
 function getWaveZombieBaseSpeed(wave=currentWave){
   let speed=ZOMBIE_BASE_SPEED;
@@ -2307,57 +4229,125 @@ function isTutorialGuideBlockingCell(cell){
 }
 
 const ZOMBIE_ATTACK_VISUAL_OFFSET = 24;
+/** Canvas HUD(단어+HP) DOM 위치 갱신 최소 간격 — ~30fps */
+const ZOMBIE_DOM_HUD_UPDATE_MS = 33;
 
-function updateZombiePosition(zombie, visualOffsetX=0){
-  if(!zombie||!zombie.element)return;
-  zombie.element.style.left=(zombie.x+visualOffsetX)+"px";
-  zombie.element.style.top=(zombie.row*CELL_SIZE+12)+"px";
+function updateZombiePosition(zombie, visualOffsetX=0, force=false){
+  if(!zombie)return;
+  zombie.visualOffsetX=visualOffsetX;
+  if(!zombie.element)return;
+
+  const pos=getZombieOverlayPosition(zombie,visualOffsetX);
+  const x=pos.x;
+  const y=pos.y;
+
+  if(zombie.canvasRender){
+    const now=performance.now();
+    const lastX=zombie._domPosX;
+    const lastY=zombie._domPosY;
+    const moved=
+      lastX==null||
+      lastY==null||
+      Math.abs(x-lastX)>=1||
+      Math.abs(y-lastY)>=1||
+      zombie._domVisOx!==visualOffsetX;
+    const due=(now-(zombie._domPosAt||0))>=ZOMBIE_DOM_HUD_UPDATE_MS;
+    if(!force&&!moved&&!due)return;
+
+    zombie._domPosX=x;
+    zombie._domPosY=y;
+    zombie._domPosAt=now;
+    zombie._domVisOx=visualOffsetX;
+    // board/#battle-overlay 논리 좌표 — left/top (transform:none !important 와 충돌 방지)
+    // TOP_PAD / fit scale 을 좌표에 다시 곱하지 않음
+    zombie.element.style.left=x+"px";
+    zombie.element.style.top=y+"px";
+    zombie.element.style.transform="none";
+  }else{
+    zombie.element.style.left=x+"px";
+    zombie.element.style.top=y+"px";
+  }
 }
 
 function playZombieBiteAnimation(zombie,targetCell){
-  if(!zombie||!zombie.element||!targetCell)return;
+  if(!zombie||!targetCell)return;
 
-  // 공격 모션: 뒤로 힘을 모았다가 식물 쪽으로 들이치고 다시 반동한다.
-  zombie.element.classList.remove("zombie-bite");
-  void zombie.element.offsetWidth;
-  zombie.element.classList.add("zombie-bite");
-
-  const plant=targetCell.querySelector(".plant");
-  if(plant){
-    const hitClass=
-      zombie.enemyType==="breaker"
-        ? "plant-hit-heavy"
-        : "plant-hit";
-
-    plant.classList.remove("plant-hit","plant-hit-heavy");
-    void plant.offsetWidth;
-    plant.classList.add(hitClass);
-
+  // Canvas: bite/hit는 render loop visual offset만 (zombie.x·cell 좌표 불변)
+  if(zombie.canvasRender){
+    zombie.biteAnimStart=nowGame();
+    zombie.biteAnimDuration=CANVAS_BITE_ANIM_MS;
+  }else if(zombie.element){
+    zombie.element.classList.remove("zombie-bite");
+    void zombie.element.offsetWidth;
+    zombie.element.classList.add("zombie-bite");
     setTimeout(()=>{
-      if(plant&&plant.isConnected){
-        plant.classList.remove("plant-hit","plant-hit-heavy");
+      if(zombie.element&&zombie.element.isConnected){
+        zombie.element.classList.remove("zombie-bite");
       }
-    },520);
+    },560);
   }
 
-  setTimeout(()=>{
-    if(zombie.element&&zombie.element.isConnected){
-      zombie.element.classList.remove("zombie-bite");
+  if(useCanvasPlants()){
+    triggerCanvasPlantHitAnim(targetCell);
+  }else{
+    const plant=targetCell.querySelector(".plant");
+    if(plant){
+      const hitClass=
+        zombie.enemyType==="breaker"
+          ? "plant-hit-heavy"
+          : "plant-hit";
+
+      plant.classList.remove("plant-hit","plant-hit-heavy");
+      void plant.offsetWidth;
+      plant.classList.add(hitClass);
+
+      setTimeout(()=>{
+        if(plant&&plant.isConnected){
+          plant.classList.remove("plant-hit","plant-hit-heavy");
+        }
+      },520);
     }
-  },560);
+  }
 }
 function updateZombieLabelOffsets(){
   if(PERF_DIAG.enabled)PERF_DIAG.calls.updateZombieLabelOffsets++;
   if(PERF_DIAG.disableZombieApproachAppearance)return;
   perfCountZombiesFilter();
   const aliveZombies=zombies.filter(z=>z.alive&&z.element);
-  aliveZombies.forEach(z=>{const l=z.element.querySelector(":scope > div:first-child");if(l)l.style.top="-14px";});
+
+  aliveZombies.forEach(z=>{
+    const baseTop=z.canvasRender?-18:-14;
+    z.labelOffsetY=baseTop;
+    const l=z.wordLabelEl||(z.wordLabelEl=z.element.querySelector(".zombie-word-label"));
+    if(l)l.style.top=baseTop+"px";
+  });
+
   for(let row=0;row<BOARD_ROWS;row++){
     const laneZombies=aliveZombies.filter(z=>z.row===row).sort((a,b)=>a.x-b.x);let group=[];
-    function applyGroupOffsets(){if(group.length<=1){group=[];return;}const offsets=[-26,-14,-2,-38,10];group.forEach((z,i)=>{const l=z.element.querySelector(":scope > div:first-child");if(l)l.style.top=offsets[i%offsets.length]+"px";});group=[];}
-    for(const z of laneZombies){if(!group.length){group.push(z);continue;}const prev=group[group.length-1];if(Math.abs(z.x-prev.x)<=72)group.push(z);else{applyGroupOffsets();group.push(z);}}
+    function applyGroupOffsets(){
+      if(group.length<=1){group=[];return;}
+      const offsets=[-26,-14,-2,-38,10];
+      group.forEach((z,i)=>{
+        const top=offsets[i%offsets.length];
+        z.labelOffsetY=top;
+        const l=z.wordLabelEl||(z.wordLabelEl=z.element.querySelector(".zombie-word-label"));
+        if(l)l.style.top=top+"px";
+      });
+      group=[];
+    }
+    for(const z of laneZombies){
+      if(!group.length){group.push(z);continue;}
+      const prev=group[group.length-1];
+      if(Math.abs(z.x-prev.x)<=72)group.push(z);
+      else{applyGroupOffsets();group.push(z);}
+    }
     applyGroupOffsets();
   }
+}
+
+function countWaveWordLabelDomElements(){
+  if(!board)return 0;
+  return board.querySelectorAll(".zombie-word-label").length;
 }
 function getZombieCellIndex(zombie){
   if(zombie.x<0||zombie.x>=BOARD_WIDTH)return -1;const column=Math.floor(zombie.x/CELL_SIZE);if(column<0||column>=BOARD_COLUMNS)return -1;return zombie.row*BOARD_COLUMNS+column;
@@ -2381,13 +4371,14 @@ function updatePlantHPBar(cell){
     "plant-hp-critical"
   );
 
-  if(hpRatio <= 0.15){
+  // Canvas 모드에서도 class는 유지(비-Canvas 폴백·퇴장 고스트용). 시각은 renderCanvasPlants.
+  if(hpRatio <= PLANT_HP_VIS_CRITICAL){
     plant.classList.add("plant-hp-critical");
   }
-  else if(hpRatio <= 0.40){
+  else if(hpRatio <= PLANT_HP_VIS_LOW){
     plant.classList.add("plant-hp-low");
   }
-  else if(hpRatio <= 0.70){
+  else if(hpRatio <= PLANT_HP_VIS_MEDIUM){
     plant.classList.add("plant-hp-medium");
   }
 }
@@ -2395,6 +4386,17 @@ function updatePlantHPBar(cell){
 function createHitImpactParticle(zombie,heavy=false){
   if(!zombie||!board) return;
   const pos=getZombieHitVfxPosition(zombie);
+  if(useCanvasHitVfx()&&!raidMode){
+    spawnCanvasHitEffect({
+      kind:"spark",
+      x:pos.x,
+      y:pos.y,
+      heavy,
+      seed:Math.random()*Math.PI*2,
+      duration:heavy?150:125
+    });
+    return;
+  }
   const spark=document.createElement("div");
   spark.className=heavy
     ? "hit-impact-spark hit-impact-heavy"
@@ -2404,17 +4406,33 @@ function createHitImpactParticle(zombie,heavy=false){
   board.appendChild(spark);
   setTimeout(()=>{
     if(spark.parentElement) spark.remove();
-  },heavy?240:180);
+  },heavy?150:125);
 }
 
 function triggerZombieHitVisual(zombie,extraClass=""){
-  if(!zombie||!zombie.alive||!zombie.element)return;
+  if(!zombie||!zombie.alive)return;
 
   const heavy=
     extraClass==="heavy-number" ||
     extraClass==="sniper-number";
 
   const dot=extraClass==="dot-number";
+  const flashMs=heavy?280:dot?140:160;
+
+  // Canvas 모드: soft flash + recoil (filter 없음, 60~90ms flash)
+  if(zombie.canvasRender){
+    const now=nowGame();
+    const flashDur=heavy?85:dot?55:75;
+    zombie.hitFlashUntil=now+flashDur;
+    zombie.hitFlashDuration=flashDur;
+    if(!dot){
+      zombie.hitRecoilStart=now;
+      zombie.hitRecoilDuration=CANVAS_HIT_RECOIL_MS;
+    }
+    return;
+  }
+
+  if(!zombie.element)return;
 
   zombie.element.classList.remove(
     "zombie-hit",
@@ -2444,7 +4462,7 @@ function triggerZombieHitVisual(zombie,extraClass=""){
       "zombie-hit-heavy",
       "zombie-hit-dot"
     );
-  },heavy?280:dot?140:160);
+  },flashMs);
 }
 
 function damageZombie(zombie,damage,extraClass=""){
@@ -2454,10 +4472,16 @@ function damageZombie(zombie,damage,extraClass=""){
     extraClass==="heavy-number" ||
     extraClass==="sniper-number";
 
-  triggerZombieHitVisual(zombie,extraClass);
-  if(extraClass!=="dot-number"){
-    createHitImpactParticle(zombie,heavy);
+  const willKill=zombie.hp-damage<=0;
+
+  // 사망 타격: death VFX만 — 일반 hit flash/burst와 과한 겹침 방지
+  if(!willKill){
+    triggerZombieHitVisual(zombie,extraClass);
+    if(extraClass!=="dot-number"){
+      createHitImpactParticle(zombie,heavy);
+    }
   }
+
   createDamageNumber(zombie,damage,extraClass);
   zombie.hp-=damage;
   updateZombieHPBar(zombie);
@@ -2486,9 +4510,17 @@ function killZombie(zombie){
   }
 
   /* 게임 판정에서는 즉시 사망 처리하되,
-     화면에서는 짧은 퇴장 모션 후 제거한다. */
+     Canvas는 deadZombieVisuals 잔상만 짧게 렌더 (collision 대상 아님). */
   zombie.alive=false;
   invalidateFrameTargetCaches();
+
+  const deathHudMs=zombie.canvasRender
+    ?(zombie.enemyType==="bomber"?CANVAS_DEATH_ANIM_BOMBER_MS:CANVAS_DEATH_ANIM_MS)
+    :(zombie.enemyType==="bomber"?300:430);
+
+  if(zombie.canvasRender){
+    spawnCanvasZombieDeathVisual(zombie);
+  }
 
   if(zombie.element&&zombie.element.parentElement){
     zombie.element.classList.remove(
@@ -2509,7 +4541,10 @@ function killZombie(zombie){
       if(zombie.element&&zombie.element.parentElement){
         zombie.element.remove();
       }
-    },zombie.enemyType==="bomber" ? 300 : 430);
+      zombie.element=null;
+      zombie.wordTextEl=null;
+      zombie.wordLabelEl=null;
+    },deathHudMs);
   }
 
   resolvedZombies++;
@@ -2551,6 +4586,10 @@ const PERF_DIAG = {
   tStatus:0,
   tTarget:0,
   tProjectile:0,
+  tHitVfx:0,
+  tStatusVfx:0,
+  tSupportVfx:0,
+  tPlant:0,
   tOther:0,
   tFrame:0,
   frameDeltaSum:0,
@@ -2559,6 +4598,23 @@ const PERF_DIAG = {
   maxProjectiles:0,
   projectileSum:0,
   projectileSamples:0,
+  projectileDomSum:0,
+  wordLabelDomSum:0,
+  wordLabelDomSamples:0,
+  maxHitVfx:0,
+  hitVfxSum:0,
+  hitVfxSamples:0,
+  hitVfxDomSum:0,
+  maxStatusVfx:0,
+  statusVfxSum:0,
+  statusVfxSamples:0,
+  statusClassDomSum:0,
+  supportVfxDomSum:0,
+  supportVfxDomSamples:0,
+  plantImgDomSum:0,
+  plantImgDomSamples:0,
+  _lastStatusVfxMs:0,
+  slowCastProbe:null,
   windowStart:0,
   lastLogAt:0,
 
@@ -2574,9 +4630,14 @@ const PERF_DIAG = {
   reset(){
     this.frames=0;
     this.tSupport=0;this.tZombie=0;this.tLabel=0;this.tStatus=0;
-    this.tTarget=0;this.tProjectile=0;this.tOther=0;this.tFrame=0;
+    this.tTarget=0;this.tProjectile=0;this.tHitVfx=0;this.tStatusVfx=0;this.tSupportVfx=0;this.tPlant=0;this.tOther=0;this.tFrame=0;
     this.frameDeltaSum=0;this.onBoardSum=0;
-    this.maxProjectiles=0;this.projectileSum=0;this.projectileSamples=0;
+    this.maxProjectiles=0;this.projectileSum=0;this.projectileSamples=0;this.projectileDomSum=0;
+    this.wordLabelDomSum=0;this.wordLabelDomSamples=0;
+    this.maxHitVfx=0;this.hitVfxSum=0;this.hitVfxSamples=0;this.hitVfxDomSum=0;
+    this.maxStatusVfx=0;this.statusVfxSum=0;this.statusVfxSamples=0;this.statusClassDomSum=0;
+    this.supportVfxDomSum=0;this.supportVfxDomSamples=0;
+    this.plantImgDomSum=0;this.plantImgDomSamples=0;
     this.windowStart=performance.now();
     this.lastLogAt=this.windowStart;
     this.lastFrameWall=0;
@@ -2593,7 +4654,16 @@ const PERF_DIAG = {
       "  __PERF_DIAG__.disableProjectileVisual\n"+
       "  __PERF_DIAG__.disablePlantAttack\n"+
       "비교 시나리오: 레인 내 좀비 1/2/3/5+ 마리에 맞춰 로그의 onBoard 값을 확인하세요.\n"+
-      "projectiles: activeProjectiles.length / 로그의 waveProjRAF=0 이면 일반 투사체 개별 rAF 없음.\n"+
+      "projectiles: activeProjectiles.length / waveProjDOM≈0 (Canvas 모드) / waveProjRAF=0.\n"+
+      "waveWordLabelDOM≈0 (Canvas 좀비 모드 — 일반 Wave 단어 라벨).\n"+
+      "hitVfx: canvasHitEffects.length / waveHitVfxDOM≈0 (Canvas 피격 VFX).\n"+
+      "statusVfx: freeze Canvas overlay only (후설모음 slow tint 없음) / waveStatusClassDOM≈0.\n"+
+      "supportVfx: speed/shield/heal Canvas / supportVfxDOM≈0. 후설모음 support-active DOM 스캔 스킵.\n"+
+      "plantImgDOM≈0 (Canvas plant — board .plant-image 없음, plant-name DOM 유지).\n"+
+      "후설모음 cast: 상태값 + Canvas 전역 wave cue 1개 (~420ms). DOM/좀비별 slow visual 없음.\n"+
+      "발동 시 500ms probe: castFrame / frame avg·max / statusVfx.\n"+
+      "label ms = approach step + labelOffsets + Canvas fillText.\n"+
+      "__USE_CANVAS_SUPPORT_VFX__ / __USE_CANVAS_STATUS_VFX__ / __USE_CANVAS_ZOMBIES__ = false 로 DOM 비교 가능.\n"+
       "__PERF_DIAG__.reset() 로 집계 초기화."
     );
   },
@@ -2643,18 +4713,48 @@ function perfDiagTickFrame(frameMs,onBoard){
 
   console.info(
     `[perf-diag] FPS ${fps.toFixed(1)} | Frame ${avg("tFrame").toFixed(2)}ms | onBoard≈${(PERF_DIAG.onBoardSum/f).toFixed(1)} | `+
-    `support ${avg("tSupport").toFixed(2)} | zombie ${avg("tZombie").toFixed(2)} | label ${avg("tLabel").toFixed(2)} | `+
-    `status ${avg("tStatus").toFixed(2)} | target ${avg("tTarget").toFixed(2)} | projectile ${avg("tProjectile").toFixed(2)} | etc ${avg("tOther").toFixed(2)}`
+    `support ${avg("tSupport").toFixed(2)} | supportVfx ${avg("tSupportVfx").toFixed(2)} | plant ${avg("tPlant").toFixed(2)} | zombie ${avg("tZombie").toFixed(2)} | label ${avg("tLabel").toFixed(2)} | `+
+    `hitVfx ${avg("tHitVfx").toFixed(2)} | statusVfx ${avg("tStatusVfx").toFixed(2)} | status ${avg("tStatus").toFixed(2)} | target ${avg("tTarget").toFixed(2)} | projectile ${avg("tProjectile").toFixed(2)} | etc ${avg("tOther").toFixed(2)}`
   );
   const projAvg=PERF_DIAG.projectileSamples
     ?(PERF_DIAG.projectileSum/PERF_DIAG.projectileSamples).toFixed(1)
+    :"0";
+  const projDomAvg=PERF_DIAG.projectileSamples
+    ?(PERF_DIAG.projectileDomSum/PERF_DIAG.projectileSamples).toFixed(1)
+    :"0";
+  const wordLabelDomAvg=PERF_DIAG.wordLabelDomSamples
+    ?(PERF_DIAG.wordLabelDomSum/PERF_DIAG.wordLabelDomSamples).toFixed(1)
+    :"0";
+  const hitVfxAvg=PERF_DIAG.hitVfxSamples
+    ?(PERF_DIAG.hitVfxSum/PERF_DIAG.hitVfxSamples).toFixed(1)
+    :"0";
+  const hitVfxDomAvg=PERF_DIAG.hitVfxSamples
+    ?(PERF_DIAG.hitVfxDomSum/PERF_DIAG.hitVfxSamples).toFixed(1)
+    :"0";
+  const statusVfxAvg=PERF_DIAG.statusVfxSamples
+    ?(PERF_DIAG.statusVfxSum/PERF_DIAG.statusVfxSamples).toFixed(1)
+    :"0";
+  const statusClassDomAvg=PERF_DIAG.statusVfxSamples
+    ?(PERF_DIAG.statusClassDomSum/PERF_DIAG.statusVfxSamples).toFixed(1)
+    :"0";
+  const supportVfxDomAvg=PERF_DIAG.supportVfxDomSamples
+    ?(PERF_DIAG.supportVfxDomSum/PERF_DIAG.supportVfxDomSamples).toFixed(1)
+    :"0";
+  const plantImgDomAvg=PERF_DIAG.plantImgDomSamples
+    ?(PERF_DIAG.plantImgDomSum/PERF_DIAG.plantImgDomSamples).toFixed(1)
     :"0";
   console.info(
     `[perf-diag] calls/sec | getCompatibleTargets ${perSec(c.getCompatibleTargets)} | isSupportActive ${perSec(c.isSupportActive)} | `+
     `getAttackSpeedMultiplier ${perSec(c.getAttackSpeedMultiplier)} | zombies.filter ${perSec(c.zombiesFilter)} | `+
     `labelOffsets ${perSec(c.updateZombieLabelOffsets)} | approach ${perSec(c.updateZombieApproachAppearance)} | `+
     `projectiles avg=${projAvg} max=${PERF_DIAG.maxProjectiles} active=${typeof activeProjectiles!=="undefined"?activeProjectiles.length:0} `+
-    `waveProjRAF=0 (batched) | `+
+    `waveProjDOM≈${projDomAvg} waveProjRAF=0 canvasProj=${useCanvasProjectiles()?"ON":"OFF"} | `+
+    `waveWordLabelDOM≈${wordLabelDomAvg} canvasZombie=${useCanvasZombies()?"ON":"OFF"} | `+
+    `hitVfx avg=${hitVfxAvg} max=${PERF_DIAG.maxHitVfx} active=${typeof canvasHitEffects!=="undefined"?canvasHitEffects.length:0} `+
+    `waveHitVfxDOM≈${hitVfxDomAvg} canvasHitVfx=${useCanvasHitVfx()?"ON":"OFF"} | `+
+    `statusVfx avg=${statusVfxAvg} max=${PERF_DIAG.maxStatusVfx} waveStatusClassDOM≈${statusClassDomAvg} canvasStatus=${useCanvasStatusVfx()?"ON":"OFF"} | `+
+    `supportVfxDOM≈${supportVfxDomAvg} canvasSupport=${useCanvasSupportVfx()?"ON":"OFF"} | `+
+    `plantImgDOM≈${plantImgDomAvg} canvasPlant=${useCanvasPlants()?"ON":"OFF"} | `+
     `flags supportVis=${PERF_DIAG.disableSupportVisual?"OFF":"ON"} approach=${PERF_DIAG.disableZombieApproachAppearance?"OFF":"ON"} `+
     `projVis=${PERF_DIAG.disableProjectileVisual?"OFF":"ON"} attack=${PERF_DIAG.disablePlantAttack?"OFF":"ON"}`
   );
@@ -2823,6 +4923,7 @@ function getNearbyCellIndices(index,radius=1){
 }
 
 function updateSupportVisuals(cells){
+  const canvasVis=useCanvasSupportVfx();
   const wantSpeed=new Array(cells.length).fill(false);
   const wantShield=new Array(cells.length).fill(false);
 
@@ -2832,11 +4933,23 @@ function updateSupportVisuals(cells){
     const data=PLANT_DB[type];
     if(!isSupportActive(supportIndex,data.feature))return;
     getNearbyCellIndices(supportIndex,data.special.radius).forEach(targetIndex=>{
-      if(!cells[targetIndex].querySelector(".plant"))return;
+      // querySelector 대신 dataset — layout thrash 방지
+      if(cells[targetIndex].dataset.plant!=="true")return;
       if(type==="고모음")wantSpeed[targetIndex]=true;
       if(type==="원순모음")wantShield[targetIndex]=true;
     });
   });
+
+  if(canvasVis){
+    ensureCanvasSupportVis(cells.length);
+    const speed=CANVAS_SUPPORT_VIS.speed;
+    const shield=CANVAS_SUPPORT_VIS.shield;
+    for(let i=0;i<cells.length;i++){
+      speed[i]=wantSpeed[i];
+      shield[i]=wantShield[i];
+    }
+    return;
+  }
 
   cells.forEach((cell,index)=>{
     const plant=cell.querySelector(".plant");
@@ -2855,6 +4968,10 @@ function updateSupportVisuals(cells){
 }
 
 function updateSupportPlantActiveVisuals(cells){
+  // Canvas: support-active는 CSS상 시각 효과 없음 → DOM class·후설모음 feature 스캔 스킵
+  // (후설모음 발동 프레임과 겹치는 불필요 visual 재계산 완화)
+  if(useCanvasSupportVfx())return;
+
   cells.forEach((cell,index)=>{
     const type=cell.dataset.plantType,plant=cell.querySelector(".plant");
     if(!type||!plant)return;
@@ -2949,10 +5066,29 @@ function triggerPlantFireMotion(row,column,plantType){
   const cell=boardCells[index];
   if(!cell || cell.dataset.plantType!==plantType)return;
 
+  const motionClass=PLANT_FIRE_MOTION_CLASS[plantType]||"plant-fire-light";
+  const duration=
+    motionClass==="plant-fire-heavy" ? 380 :
+    motionClass==="plant-fire-sniper" ? 340 :
+    motionClass==="plant-fire-chain" ? 300 :
+    motionClass==="plant-fire-dot" ? 300 :
+    motionClass==="plant-fire-pierce" ? 300 :
+    motionClass==="plant-fire-light" ? 260 :
+    220;
+
+  // Canvas: DOM class·offsetWidth 없이 recoil 상태만 (판정/쿨다운 불변)
+  if(useCanvasPlants()){
+    cell._plantFireUntil=nowGame()+duration;
+    cell._plantFireDuration=duration;
+    cell._plantFireRecoil=
+      motionClass==="plant-fire-heavy"||motionClass==="plant-fire-sniper"?6:
+      motionClass==="plant-fire-burst"?5:4;
+    return;
+  }
+
   const plant=cell.querySelector(".plant");
   if(!plant)return;
 
-  const motionClass=PLANT_FIRE_MOTION_CLASS[plantType]||"plant-fire-light";
   const allClasses=[
     "plant-firing",
     "plant-fire-light",
@@ -2968,15 +5104,6 @@ function triggerPlantFireMotion(row,column,plantType){
   plant.classList.remove(...allClasses);
   void plant.offsetWidth;
   plant.classList.add("plant-firing",motionClass);
-
-  const duration=
-    motionClass==="plant-fire-heavy" ? 380 :
-    motionClass==="plant-fire-sniper" ? 340 :
-    motionClass==="plant-fire-chain" ? 300 :
-    motionClass==="plant-fire-dot" ? 300 :
-    motionClass==="plant-fire-pierce" ? 300 :
-    motionClass==="plant-fire-light" ? 260 :
-    220;
 
   setTimeout(()=>{
     if(!plant.isConnected)return;
@@ -3056,13 +5183,13 @@ function performBurstAttack(row,column,target,data){
           );
 
           if(final&&data.special.splashDamage&&data.special.splashRadius){
-            createEffect("💫",impactX+15,impactRow*CELL_SIZE+20,"explosion-effect",500);
+            createWaveHitTextEffect("💫",impactX+15,impactRow*CELL_SIZE+20,"explosion-effect",500);
             zombies.forEach(z=>{
               if(!z.alive||z===hitTarget||z.x>=BOARD_WIDTH)return;
               const distance=Math.hypot(z.x-impactX,(z.row-impactRow)*CELL_SIZE);
               if(distance<=data.special.splashRadius){
                 damageZombie(z,data.special.splashDamage);
-                createEffect("✹",z.x+20,z.row*CELL_SIZE+25,"explosion-effect",350);
+                createWaveHitTextEffect("✹",z.x+20,z.row*CELL_SIZE+25,"explosion-effect",350);
               }
             });
           }
@@ -3443,6 +5570,10 @@ function triggerRaidBossBite(blockingCells){
   }, 720);
 
   blockingCells.forEach(target => {
+    if(useCanvasPlants()){
+      triggerCanvasPlantHitAnim(target.cell);
+      return;
+    }
     const plant = target.cell.querySelector(".plant");
     if(!plant) return;
 
@@ -3495,10 +5626,8 @@ function setRaidBossMotionPaused(isPaused){
 function updateRaidBossStatusVisuals(now=nowGame()){
   if(!raidBoss || !raidBoss.body) return;
 
-  raidBoss.body.classList.toggle(
-    "raid-boss-slowed-visual",
-    raidBoss.slowedUntil > now
-  );
+  // 후설모음 slow: 개별 boss visual 없음 (전역 Canvas wave cue + 실제 slowedUntil만)
+  raidBoss.body.classList.remove("raid-boss-slowed-visual");
 
   raidBoss.body.classList.toggle(
     "raid-boss-frozen-visual",
@@ -3512,15 +5641,7 @@ function triggerRaidBossStatusBurst(type){
   const bossX = raidBoss.x - 55;
   const bossY = 55 + Math.random() * 80;
 
-  if(type === "후설모음"){
-    createEffect(
-      "🐌",
-      bossX,
-      bossY,
-      "raid-status-slow-effect",
-      900
-    );
-  }
+  // 후설모음: createEffect 버스트 없음 (전역 wave cue만)
 
   if(type === "저모음" || type === "전설모음"){
     createEffect(
@@ -3706,55 +5827,9 @@ function playBossWordSwitchEffect(){
 }
 
 function createRaidDamageNumber(damage,extraClass=""){
-  if(!raidBoss||!raidBoss.alive||!board)return;
-
-  // 연속 타격 시 과도한 숫자 겹침 방지 (데미지 합산 없음)
-  const activeNumbers=board.querySelectorAll(".raid-damage-number");
-  if(activeNumbers.length>=8){
-    activeNumbers[0].remove();
-  }
-
-  raidDamageSerial++;
-
-  const number=document.createElement("div");
-  number.classList.add("damage-number","raid-damage-number");
-  if(extraClass)number.classList.add(extraClass);
-
-  const displayDamage=Math.max(1,Math.round(damage));
-  number.textContent=`-${displayDamage}`;
-
-  const isHeavy=
-    extraClass==="heavy-number" ||
-    extraClass==="sniper-number";
-  const isDot=extraClass==="dot-number";
-  // Boss visual spawn — X ±20~35, Y ±8~15; slot stagger reduces overlap
-  const bossVisualCenterX=raidBoss.x-29;
-  const bossVisualCenterY=92;
-  const xSlots=[-32,-24,-18,18,24,32];
-  const ySlots=[-12,-6,2,8,14,-10];
-  const phase=raidDamageSerial%xSlots.length;
-  const offsetX=xSlots[phase]+((Math.random()*8)-4);
-  const offsetY=ySlots[phase]+((Math.random()*6)-3);
-  const risePx=-(35+Math.random()*20);
-  const driftPx=(Math.random()*12)-6;
-  const duration=isDot
-    ? 0.48+Math.random()*0.08
-    : isHeavy
-      ? 0.58+Math.random()*0.1
-      : 0.52+Math.random()*0.12;
-
-  number.style.left=(bossVisualCenterX+offsetX)+"px";
-  number.style.top=(bossVisualCenterY+offsetY)+"px";
-  number.style.setProperty("--raid-damage-drift",driftPx+"px");
-  number.style.setProperty("--raid-damage-rise",risePx+"px");
-  number.style.animationDuration=duration+"s";
-  number.style.zIndex="58";
-
-  if(isHeavy) number.classList.add("raid-damage-heavy");
-  if(isDot) number.classList.add("raid-damage-dot");
-
-  board.appendChild(number);
-  setTimeout(()=>number.remove(),Math.ceil(duration*1000)+40);
+  // BOSS floating damage number 비활성 — DOM/setTimeout/animation 미생성.
+  // damageRaidBoss의 HP·점수·hit VFX 경로는 그대로 유지.
+  return;
 }
 function createRaidBossHitImpact(heavy=false){
   if(!raidMode||!raidBoss||!raidBoss.alive||!board)return;
@@ -3829,6 +5904,7 @@ function damageRaidBoss(damage,extraClass=""){
     createRaidBossHitImpact(heavy);
   }
 
+  // floating number 비활성(createRaidDamageNumber stub) — HP/점수/판정은 아래에서 그대로 진행
   createRaidDamageNumber(damage,extraClass);
   raidBoss.hp-=damage;
   updateRaidBossUI();
@@ -4086,20 +6162,13 @@ function processRaidControlPlants(cells,now){
     }
 
     if(type==="후설모음"){
+      // gameplay: slow 상태만 (interval/duration/0.5는 PLANT_DB·이동 로직)
       const durationMs=data.special.duration*1000;
-      raidBoss.slowedUntil=Math.max(raidBoss.slowedUntil,now+durationMs);
+      raidBoss.slowedUntil=Math.max(raidBoss.slowedUntil||0,now+durationMs);
 
-      triggerRaidBossStatusBurst(type);
+      // visual: 전역 wave만 (boss 개별 slow visual 없음). gameplay와 분리.
+      spawnBackVowelGlobalWaveCue(420);
       updateRaidBossStatusVisuals(now);
-
-      createGlobalSlowScreen();
-      createEffect(
-        "🐌 보스 이동 둔화!",
-        column*CELL_SIZE+5,
-        row*CELL_SIZE+10,
-        "slow-effect",
-        800
-      );
     }
 
     if(type==="전설모음"){
@@ -4155,19 +6224,32 @@ function processHealing(cells, now){
       updatePlantHPBar(targetCell);
 
       if(newHp > oldHp){
-        targetCell.classList.remove("heal-flash");
-        void targetCell.offsetWidth;
-        targetCell.classList.add("heal-flash");
-
-        setTimeout(() => {
+        if(useCanvasSupportVfx()){
+          // heal-flash DOM + offsetWidth 강제 reflow 제거 → Canvas burst
+          const row=Math.floor(targetIndex/BOARD_COLUMNS);
+          const column=targetIndex%BOARD_COLUMNS;
+          spawnCanvasHitEffect({
+            kind:"heal",
+            x:column*CELL_SIZE+CELL_SIZE/2,
+            y:row*CELL_SIZE+CELL_SIZE/2,
+            duration:750
+          });
+        }else{
           targetCell.classList.remove("heal-flash");
-        }, 750);
+          void targetCell.offsetWidth;
+          targetCell.classList.add("heal-flash");
+
+          setTimeout(() => {
+            targetCell.classList.remove("heal-flash");
+          }, 750);
+        }
       }
     });
   });
 }
 function processFreezePlants(cells,now){
   if(raidMode)return;
+  const canvasStatus=useCanvasStatusVfx();
   cells.forEach((cell,index)=>{
     if(cell.dataset.plantType!=="저모음")return;
     const data=PLANT_DB["저모음"],last=Number(cell.dataset.lastSupportTime);
@@ -4181,34 +6263,66 @@ function processFreezePlants(cells,now){
     targets.forEach(target=>{
       const duration=data.special.duration*target.statusDurationMultiplier;
       target.frozenUntil=Math.max(target.frozenUntil,now+duration*1000);
-      createEffect(target.enemyType==="resilient"?"🛡❄":"🧊",target.x+25,target.row*CELL_SIZE+30,"freeze-effect",700);
+      // Canvas: per-zombie DOM freeze VFX 생략 — frozenUntil만 설정, overlay는 render frame
+      if(!canvasStatus){
+        createEffect(target.enemyType==="resilient"?"🛡❄":"🧊",target.x+25,target.row*CELL_SIZE+30,"freeze-effect",700);
+      }
     });
     createEffect("❄ 레인 정지!",column*CELL_SIZE+10,row*CELL_SIZE+10,"freeze-effect",700);
   });
 }
 function processGlobalSlowPlants(cells,now){
   if(raidMode)return;
-  cells.forEach((cell,index)=>{
-    if(cell.dataset.plantType!=="후설모음")return;
-    const data=PLANT_DB["후설모음"],last=Number(cell.dataset.lastSupportTime);
-    if(now-last<data.special.interval*1000)return;
-    if(!hasAliveOnBoardWithFeature(data.feature))return;
-    const targets=getFrameAliveOnBoard();
-    if(!targets.length)return;
+  const data=PLANT_DB["후설모음"];
+  if(!data||!data.special)return;
+  const feature=data.feature;
+  const intervalMs=data.special.interval*1000;
+  const durationSec=data.special.duration;
+  const multiplier=data.special.multiplier;
+  let castApplied=false;
+  let lastTargetsLen=0;
+
+  for(let index=0;index<cells.length;index++){
+    const cell=cells[index];
+    if(cell.dataset.plantType!=="후설모음")continue;
+    const last=Number(cell.dataset.lastSupportTime)||0;
+    if(now-last<intervalMs)continue;
+    // 발동 조건: 보드 안 후설모음 적 존재 (기존과 동일)
+    if(!hasAliveOnBoardWithFeature(feature))continue;
+
+    // gameplay: 생존 적 전체 (접근 구간 포함) — "모든 적" 둔화. VFX와 독립.
+    const targets=getFrameAliveZombies();
+    if(!targets.length)continue;
+
     cell.dataset.lastSupportTime=now;
-    createGlobalSlowScreen();
-    targets.forEach(target=>{
-      const duration=data.special.duration*target.statusDurationMultiplier;
-      target.slowedUntil=Math.max(target.slowedUntil,now+duration*1000);
-      target.slowMultiplier=Math.min(target.slowMultiplier,data.special.multiplier);
-      createEffect(target.enemyType==="resilient"?"🛡🐌":"🐌",target.x+20,target.row*CELL_SIZE+25,"slow-effect",650);
-    });
-    const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;
-    createEffect("🐌 전장 둔화!",column*CELL_SIZE+5,row*CELL_SIZE+10,"slow-effect",800);
-  });
+    lastTargetsLen=targets.length;
+
+    for(let i=0;i<targets.length;i++){
+      const target=targets[i];
+      if(!target||!target.alive)continue;
+      const statusMult=typeof target.statusDurationMultiplier==="number"
+        ?target.statusDurationMultiplier
+        :1;
+      const durationMs=durationSec*statusMult*1000;
+      target.slowedUntil=Math.max(target.slowedUntil||0,now+durationMs);
+      target.slowMultiplier=Math.min(
+        typeof target.slowMultiplier==="number"?target.slowMultiplier:1,
+        multiplier
+      );
+    }
+
+    castApplied=true;
+  }
+
+  // visual: gameplay 성공 후에만 (없어도 slow 상태는 이미 적용됨)
+  if(castApplied){
+    spawnBackVowelGlobalWaveCue(420);
+    beginSlowCastPerfProbe(lastTargetsLen,{castDom:0});
+  }
 }
 function processGlobalFreezePlants(cells,now){
   if(raidMode)return;
+  const canvasStatus=useCanvasStatusVfx();
   cells.forEach((cell,index)=>{
     if(cell.dataset.plantType!=="전설모음")return;
     const data=PLANT_DB["전설모음"],last=Number(cell.dataset.lastSupportTime);
@@ -4221,7 +6335,9 @@ function processGlobalFreezePlants(cells,now){
     targets.forEach(target=>{
       const duration=data.special.duration*target.statusDurationMultiplier;
       target.frozenUntil=Math.max(target.frozenUntil,now+duration*1000);
-      createEffect(target.enemyType==="resilient"?"🛡❄":"❄",target.x+25,target.row*CELL_SIZE+25,"global-freeze-effect",700);
+      if(!canvasStatus){
+        createEffect(target.enemyType==="resilient"?"🛡❄":"❄",target.x+25,target.row*CELL_SIZE+25,"global-freeze-effect",700);
+      }
     });
     const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;
     createEffect("❄❄",column*CELL_SIZE+25,row*CELL_SIZE+20,"global-freeze-cast-effect",900);
@@ -4412,23 +6528,14 @@ function triggerRaidShockwaveLanePlantHop(cells,targetRow){
 
 function triggerRaidShockwavePlantHop(cell,delayMs=0){
   if(!cell)return;
-  const plant=cell.querySelector(".plant");
-  if(!plant)return;
-
-  const apply=()=>{
-    if(!plant.isConnected)return;
-    // 한 번만: 진행 중이면 재시작하지 않음
-    if(plant.classList.contains("raid-shockwave-hop"))return;
-    plant.classList.add("raid-shockwave-hop");
-    setTimeout(()=>{
-      if(plant.isConnected){
-        plant.classList.remove("raid-shockwave-hop");
-      }
-    },170);
-  };
-
-  if(delayMs>0) setTimeout(apply,delayMs);
-  else apply();
+  const now=nowGame();
+  // 진행 중이면 재시작하지 않음 (기존 CSS hop과 동일)
+  if(cell._shockwaveBounceStart){
+    const t=(now-cell._shockwaveBounceStart)/CANVAS_SHOCKWAVE_BOUNCE_MS;
+    if(t>=0&&t<1)return;
+  }
+  // pause-aware start (+ column stagger). 별도 timer/rAF/CSS 없음
+  cell._shockwaveBounceStart=now+Math.max(0,delayMs|0);
 }
 
 function destroyPlantsForRaidOpening(){
@@ -5050,6 +7157,7 @@ function gameLoop(currentTime){
     for(let i=0;i<activeProjectiles.length;i++){
       activeProjectiles[i].lastFrameTime=null;
     }
+    // pause 중에는 VFX/이동 시간 진행 없음(nowGame freeze). 마지막 Canvas 프레임 유지.
     requestAnimationFrame(gameLoop);
     return;
   }
@@ -5093,6 +7201,9 @@ function gameLoop(currentTime){
         // 소리꽃 실제 생산 순간에만 SFX (자연 회복 setInterval과는 분리)
         playSfx("energy_gain");
 
+        // Canvas 본체 생산 펄스 — pause-aware now와 동기 (별도 timer/rAF 없음)
+        cell._energyPulseStart=now;
+
         const plant = cell.querySelector(".plant");
 
         if(plant){
@@ -5125,8 +7236,20 @@ function gameLoop(currentTime){
       let _labelCost=0;
       zombies.forEach(zombie=>{
         if(!zombie.alive)return;let delta=(now-zombie.lastUpdateTime)/1000;delta=Math.min(delta,0.1);zombie.lastUpdateTime=now;
-        zombie.element.classList.toggle("frozen",zombie.frozenUntil>now);
-        if(zombie.slowedUntil>now)zombie.element.classList.add("slowed");else{zombie.element.classList.remove("slowed");zombie.slowMultiplier=1;}
+        // Canvas status VFX: frozen DOM class 미사용. 후설모음 .slowed class도 미사용.
+        // 판정값 frozenUntil/slowedUntil/slowMultiplier는 그대로 유지
+        if(zombie.canvasRender&&useCanvasStatusVfx()){
+          if(zombie.slowedUntil<=now)zombie.slowMultiplier=1;
+          const el=zombie.element;
+          if(el&&(el.classList.contains("frozen")||el.classList.contains("slowed"))){
+            el.classList.remove("frozen","slowed");
+          }
+        }else{
+          zombie.element.classList.toggle("frozen",zombie.frozenUntil>now);
+          // 후설모음: .slowed class churn 제거 (이속은 slowedUntil/slowMultiplier로만)
+          if(zombie.element.classList.contains("slowed"))zombie.element.classList.remove("slowed");
+          if(zombie.slowedUntil<=now)zombie.slowMultiplier=1;
+        }
         const cellIndex=getZombieCellIndex(zombie);
         let currentCell=cellIndex>=0?cells[cellIndex]:null;
 
@@ -5207,7 +7330,11 @@ function gameLoop(currentTime){
 
           if(zombie.frozenUntil<=now){
             let moveSpeed=zombie.baseSpeed;
-            if(zombie.slowedUntil>now)moveSpeed*=zombie.slowMultiplier;
+            // slowedUntil이 살아 있으면 반드시 감속. multiplier 이상 시 0.5로 보정.
+            if(zombie.slowedUntil>now){
+              const m=zombie.slowMultiplier;
+              moveSpeed*=(typeof m==="number"&&m>0&&m<1)?m:0.5;
+            }
             zombie.x-=moveSpeed*delta;
           }
 
@@ -5287,6 +7414,9 @@ function gameLoop(currentTime){
   // 일반 Wave 투사체: 메인 rAF에서 일괄 갱신 (개당 rAF 없음)
   updateActiveProjectiles(frameTime);
 
+  // Canvas 전투 레이어 (좀비 + 투사체 + 단어 라벨)
+  renderBattleCanvas();
+
   if(PERF_DIAG.enabled){
     const frameMs=perfNow()-_frameT0;
     PERF_DIAG.tSupport+=_supportMs;
@@ -5295,7 +7425,32 @@ function gameLoop(currentTime){
     PERF_DIAG.tStatus+=_statusMs;
     PERF_DIAG.tTarget+=_targetMs;
     PERF_DIAG.tOther+=_otherMs;
+    PERF_DIAG.wordLabelDomSamples++;
+    PERF_DIAG.wordLabelDomSum+=countWaveWordLabelDomElements();
+    PERF_DIAG.hitVfxSamples++;
+    const hv=canvasHitEffects.length;
+    PERF_DIAG.hitVfxSum+=hv;
+    if(hv>PERF_DIAG.maxHitVfx)PERF_DIAG.maxHitVfx=hv;
+    PERF_DIAG.hitVfxDomSum+=countWaveHitVfxDomElements();
+    PERF_DIAG.statusVfxSamples++;
+    {
+      const nowS=nowGame();
+      let sv=0;
+      for(let i=0;i<zombies.length;i++){
+        const z=zombies[i];
+        if(!z||!z.alive||!z.canvasRender)continue;
+        if(z.frozenUntil>nowS||z.slowedUntil>nowS)sv++;
+      }
+      PERF_DIAG.statusVfxSum+=sv;
+      if(sv>PERF_DIAG.maxStatusVfx)PERF_DIAG.maxStatusVfx=sv;
+    }
+    PERF_DIAG.statusClassDomSum+=countWaveStatusClassDomElements();
+    PERF_DIAG.supportVfxDomSamples++;
+    PERF_DIAG.supportVfxDomSum+=countWaveSupportVfxDomElements();
+    PERF_DIAG.plantImgDomSamples++;
+    PERF_DIAG.plantImgDomSum+=countBoardPlantImageDomElements();
     // projectile ms는 updateActiveProjectiles에서 PERF_DIAG.tProjectile에 누적
+    noteSlowCastProbeFrame(frameMs);
     perfDiagTickFrame(frameMs,PERF_DIAG.countOnBoard());
   }
   requestAnimationFrame(gameLoop);
@@ -6332,16 +8487,26 @@ function injectVisualAssetStyles(){
       position: absolute;
       left: 50%;
       bottom: -3px;
-      transform: translateX(-50%);
+      transform: none;
       padding: 1px 5px;
       border-radius: 6px;
-      background: rgba(255,255,255,.82);
-      border: 1px solid rgba(0,0,0,.09);
+      background: rgba(255,255,248,.97);
+      border: 1px solid rgba(74,108,52,.55);
       box-shadow: 0 1px 1px rgba(0,0,0,.10);
-      font-size: 9px;
-      font-weight: 900;
-      line-height: 1.05;
+      font-family: "SeoulNamsanGame", sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      font-style: normal;
+      font-stretch: normal;
+      font-synthesis: none;
+      letter-spacing: 0;
+      line-height: 1.2;
       white-space: nowrap;
+      width: max-content;
+      max-width: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       z-index: 7;
       pointer-events: none;
     }
@@ -6424,29 +8589,48 @@ function injectVisualAssetStyles(){
       left: 50%;
       top: -14px;
       transform: translateX(-50%);
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 3px;
-      padding: 3px 7px;
-      border-radius: 11px;
-      background: rgba(255,255,255,.94);
-      border: 1px solid rgba(0,0,0,.16);
-      box-shadow: 0 2px 4px rgba(0,0,0,.17);
+      width: max-content;
+      padding: 3px 8px;
+      border-radius: 8px;
+      background: rgba(255,255,248,.97);
+      border: 1px solid rgba(74,108,52,.55);
+      box-shadow: 0 1px 0 rgba(255,255,255,.65), 0 2px 4px rgba(0,0,0,.18);
       white-space: nowrap;
       z-index: 25;
       pointer-events: none;
+      overflow: visible;
+      font-stretch: normal;
     }
 
     .zombie-type-badge {
+      font-family: "SeoulNamsanGame", sans-serif;
       font-size: 12px;
-      line-height: 1;
+      font-weight: 700;
+      font-stretch: normal;
+      font-synthesis: none;
+      letter-spacing: 0;
+      line-height: 1.15;
+      transform: none;
     }
 
     .zombie-word-text {
-      font-size: 14px;
-      line-height: 1;
-      font-weight: 900;
-      color: #222;
+      font-family: "SeoulNamsanGame", sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      font-style: normal;
+      font-stretch: normal;
+      font-synthesis: none;
+      letter-spacing: 0;
+      line-height: 1.15;
+      color: #1a2e12;
+      white-space: nowrap;
+      transform: none;
+      display: inline-block;
+      overflow: visible;
+      width: max-content;
     }
 
     .zombie > .hp-bar {
@@ -6508,4 +8692,6 @@ preloadBattleBgm();
 initBgmAutoplayUnlock();
 injectVisualAssetStyles();
 initPauseControls();
-energyDisplay.textContent=energy;waveDisplay.textContent=currentWave;lifeDisplay.textContent=life;scoreDisplay.textContent=score;updatePlantButtons();setupBattleSideLayout();createBoard();initGameFitScale();requestAnimationFrame(gameLoop);
+energyDisplay.textContent=energy;waveDisplay.textContent=currentWave;lifeDisplay.textContent=life;scoreDisplay.textContent=score;updatePlantButtons();setupBattleSideLayout();createBoard();mountBattleCanvas();initGameFitScale();
+console.info("[battle-overlay] word/HP DOM on #battle-overlay | canvas sprites ON | shared board coords (no TOP_PAD/fit double)");
+requestAnimationFrame(gameLoop);
