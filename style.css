@@ -1,7 +1,18 @@
 /* =========================================================
    서울남산체 (게임 UI 전용)
    fonts/SeoulNamsanM.ttf · fonts/SeoulNamsanB.ttf
+
+   등록 weight를 UI에서 쓰는 400~900에 대응시킴.
+   (600/800/900만 있고 face가 없으면 Whale 등이 sans-serif→Pretendard로 탈락할 수 있음)
    ========================================================= */
+@font-face {
+  font-family: "SeoulNamsanGame";
+  src: url("fonts/SeoulNamsanM.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "SeoulNamsanGame";
   src: url("fonts/SeoulNamsanM.ttf") format("truetype");
@@ -13,7 +24,31 @@
 @font-face {
   font-family: "SeoulNamsanGame";
   src: url("fonts/SeoulNamsanB.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SeoulNamsanGame";
+  src: url("fonts/SeoulNamsanB.ttf") format("truetype");
   font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SeoulNamsanGame";
+  src: url("fonts/SeoulNamsanB.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SeoulNamsanGame";
+  src: url("fonts/SeoulNamsanB.ttf") format("truetype");
+  font-weight: 900;
   font-style: normal;
   font-display: swap;
 }
@@ -2482,7 +2517,7 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   width: 100%;
   margin-top: 3px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.05;
   text-align: center;
   opacity: .82;
@@ -9334,7 +9369,8 @@ body > h1 {
 
 #raid-hud-dock .raid-countdown {
   font-size: 10px !important;
-  font-weight: 600 !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-weight: 500 !important;
   color: rgba(184, 198, 224, 0.78) !important;
 }
 
@@ -9351,7 +9387,8 @@ body > h1 {
 
 #raid-hud-dock .raid-status {
   font-size: 10px !important;
-  font-weight: 600 !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-weight: 500 !important;
   color: rgba(255, 201, 168, 0.72) !important;
 }
 
@@ -9638,8 +9675,9 @@ body > h1 {
   padding: 0 1px;
   box-sizing: border-box;
   color: #24180c !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
   font-size: 11px !important;
-  font-weight: 900 !important;
+  font-weight: 700 !important;
   line-height: 1 !important;
   letter-spacing: -0.15px;
   pointer-events: none;
@@ -9664,8 +9702,9 @@ body > h1 {
   margin: 0 !important;
   padding: 0 2px;
   box-sizing: border-box;
+  font-family: "SeoulNamsanGame", sans-serif !important;
   font-size: 11px !important;
-  font-weight: 800 !important;
+  font-weight: 700 !important;
   letter-spacing: -0.55px !important;
   color: #3a2414 !important;
   line-height: 1 !important;
@@ -10780,7 +10819,7 @@ body {
 
 /* =========================================================
    서울남산체 Bold / Medium 최종 매핑
-   (@font-face 500/700만 사용 — 합성 굵기·스케일 압축 금지)
+   (@font-face 400~900 → M/B 파일 매핑. 합성·스케일 압축 금지)
    HUD 숫자·로고 이미지·카드 geometry 는 변경하지 않음
    ========================================================= */
 
@@ -10790,9 +10829,12 @@ body {
 .game-board .plant > .plant-name,
 .game-board .plant.plant-canvas-hud > .plant-name,
 .battle-sidebar .plant-name-label,
+.battle-sidebar .plant-button .plant-cost-label,
+.battle-sidebar .plant-button .plant-meta-label,
 .battle-sidebar .plant-button strong,
 .battle-sidebar .plant-button b,
 #remove-button .plant-name-label,
+#remove-button .plant-cost-label,
 .start-buttons button,
 #unlock-next-button,
 #restart-button,
@@ -10820,7 +10862,9 @@ body {
 #unlock-content p,
 .end-illustration-message,
 .start-credit,
-.font-credit {
+.font-credit,
+#raid-hud-dock .raid-countdown,
+#raid-hud-dock .raid-status {
   font-family: "SeoulNamsanGame", sans-serif !important;
   font-weight: 500 !important;
   font-stretch: normal !important;
