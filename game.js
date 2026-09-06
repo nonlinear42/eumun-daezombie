@@ -19,7 +19,12 @@ const PROJECTILE_START_OFFSET_Y = 12;
 
 const ZOMBIE_APPROACH_DISTANCE = 180;
 const MAX_APPROACH_BLUR = 4;
-const ZOMBIE_BASE_SPEED = CELL_SIZE / 2.8;
+// 일반 웨이브 이동속도: 기존(CELL_SIZE/2.8) 대비 약 15% 완화
+// 특수 타입 상대 배율(ENEMY_TYPES.speedMultiplier)은 유지
+const ZOMBIE_SPEED_TEMPO = 0.85;
+const ZOMBIE_BASE_SPEED = (CELL_SIZE / 2.8) * ZOMBIE_SPEED_TEMPO;
+// W1~W3 초보 적응 구간: 전체 완화에 더해 아주 약한 추가 보정(~5%)
+const EARLY_WAVE_SPEED_FACTOR = 0.95;
 const TUTORIAL_ZOMBIE_SPEED = CELL_SIZE / 5;
 const ZOMBIE_BITE_DAMAGE = 25;
 const ZOMBIE_BITE_INTERVAL = 1000;
@@ -205,7 +210,12 @@ const bgmRuntime = {
 
 function clearBgmTimer(key){
   if(bgmRuntime[key]!=null){
-    clearTimeout(bgmRuntime[key]);
+    const timer=bgmRuntime[key];
+    if(typeof timer==="object" && timer && typeof timer.clear==="function"){
+      timer.clear();
+    }else{
+      clearTimeout(timer);
+    }
     bgmRuntime[key]=null;
   }
 }
@@ -415,7 +425,7 @@ function requestBossBgm({delayMs=BGM_CONFIG.bossStartDelayMs}={}){
   fadeOutBattleBgm();
 
   const wait=Math.max(0,delayMs);
-  bgmRuntime.bossStartTimer=setTimeout(()=>{
+  bgmRuntime.bossStartTimer=setPausableTimeout(()=>{
     bgmRuntime.bossStartTimer=null;
     tryPlayBossBgm();
   },wait);
@@ -601,6 +611,45 @@ const energyDisplay = document.querySelector("#energy");
 const waveDisplay = document.querySelector("#wave");
 const lifeDisplay = document.querySelector("#life");
 const scoreDisplay = document.querySelector("#score");
+
+// 생명 감소 시각 피드백 (SFX는 추후 이 지점에 연결)
+function showLifeLostEffect(){
+  let overlay=document.getElementById("life-lost-overlay");
+  if(!overlay){
+    overlay=document.createElement("div");
+    overlay.id="life-lost-overlay";
+    overlay.className="life-lost-overlay";
+    overlay.setAttribute("aria-hidden","true");
+    document.body.appendChild(overlay);
+  }
+
+  overlay.classList.remove("is-active");
+  void overlay.offsetWidth;
+  overlay.classList.add("is-active");
+
+  const lifeHud=document.querySelector(".status-bar .hud-slot.hud-life");
+  if(lifeHud){
+    lifeHud.classList.remove("life-lost-shake");
+    void lifeHud.offsetWidth;
+    lifeHud.classList.add("life-lost-shake");
+    const clearShake=()=>{
+      lifeHud.classList.remove("life-lost-shake");
+      lifeHud.removeEventListener("animationend", clearShake);
+    };
+    lifeHud.addEventListener("animationend", clearShake);
+  }
+
+  if(lifeDisplay){
+    lifeDisplay.classList.remove("life-lost-pop");
+    void lifeDisplay.offsetWidth;
+    lifeDisplay.classList.add("life-lost-pop");
+    const clearPop=()=>{
+      lifeDisplay.classList.remove("life-lost-pop");
+      lifeDisplay.removeEventListener("animationend", clearPop);
+    };
+    lifeDisplay.addEventListener("animationend", clearPop);
+  }
+}
 const restartButton = document.querySelector("#restart-button");
 const unlockOverlay = document.querySelector("#unlock-overlay");
 const unlockTitle = document.querySelector("#unlock-title");
@@ -627,11 +676,235 @@ let life = 5;
 let score = 0;
 let currentWave = 1;
 let zombies = [];
+/** 일반 Wave 비행 투사체 (메인 gameLoop에서 일괄 갱신). RAID 투사체는 별도. */
+let activeProjectiles = [];
+/** createBoard 완료 시 캐시. 셀 순서/인덱스는 보드 재생성 전까지 고정. */
+let boardCells = [];
 let waveZombieCount = 0;
 let resolvedZombies = 0;
 let waveInProgress = false;
 let gameOver = false;
 let currentSpawnTimer = null;
+
+// ============================================
+// Pause / Resume (게임 시간 정지)
+// ============================================
+let isPaused = false;
+let pauseAccumulatedMs = 0;
+let pauseStartedAt = 0;
+const pauseBgmState = { battle:false, boss:false };
+const pausableTimeouts = [];
+let pauseButton = null;
+let pauseOverlay = null;
+
+function nowGame(){
+  if(isPaused){
+    return pauseStartedAt - pauseAccumulatedMs;
+  }
+  return Date.now() - pauseAccumulatedMs;
+}
+
+function setPausableTimeout(fn, delayMs){
+  const handle={
+    fn,
+    remaining:Math.max(0, delayMs),
+    timerId:null,
+    startedAt:0,
+    cleared:false
+  };
+
+  const arm=()=>{
+    if(handle.cleared) return;
+    handle.startedAt=performance.now();
+    handle.timerId=setTimeout(()=>{
+      handle.timerId=null;
+      const idx=pausableTimeouts.indexOf(handle);
+      if(idx>=0) pausableTimeouts.splice(idx,1);
+      if(!handle.cleared) handle.fn();
+    }, handle.remaining);
+  };
+
+  if(isPaused){
+    pausableTimeouts.push(handle);
+  }else{
+    pausableTimeouts.push(handle);
+    arm();
+  }
+
+  handle.clear=()=>{
+    handle.cleared=true;
+    if(handle.timerId!=null){
+      clearTimeout(handle.timerId);
+      handle.timerId=null;
+    }
+    const idx=pausableTimeouts.indexOf(handle);
+    if(idx>=0) pausableTimeouts.splice(idx,1);
+  };
+
+  return handle;
+}
+
+function pausePausableTimeouts(){
+  const now=performance.now();
+  pausableTimeouts.forEach(handle=>{
+    if(handle.cleared||handle.timerId==null) return;
+    clearTimeout(handle.timerId);
+    handle.timerId=null;
+    handle.remaining=Math.max(0, handle.remaining-(now-handle.startedAt));
+  });
+}
+
+function resumePausableTimeouts(){
+  pausableTimeouts.forEach(handle=>{
+    if(handle.cleared||handle.timerId!=null) return;
+    handle.startedAt=performance.now();
+    handle.timerId=setTimeout(()=>{
+      handle.timerId=null;
+      const idx=pausableTimeouts.indexOf(handle);
+      if(idx>=0) pausableTimeouts.splice(idx,1);
+      if(!handle.cleared) handle.fn();
+    }, handle.remaining);
+  });
+}
+
+function pauseGameBgm(){
+  pauseBgmState.battle=false;
+  pauseBgmState.boss=false;
+
+  if(bgmRuntime.audio && !bgmRuntime.audio.paused){
+    bgmRuntime.audio.pause();
+    pauseBgmState.battle=true;
+  }
+  if(bgmRuntime.bossAudio && !bgmRuntime.bossAudio.paused){
+    bgmRuntime.bossAudio.pause();
+    pauseBgmState.boss=true;
+  }
+}
+
+function resumeGameBgm(){
+  if(pauseBgmState.battle && bgmRuntime.audio){
+    const playPromise=bgmRuntime.audio.play();
+    if(playPromise&&typeof playPromise.catch==="function"){
+      playPromise.catch(()=>{});
+    }
+  }
+  if(pauseBgmState.boss && bgmRuntime.bossAudio){
+    const playPromise=bgmRuntime.bossAudio.play();
+    if(playPromise&&typeof playPromise.catch==="function"){
+      playPromise.catch(()=>{});
+    }
+  }
+  pauseBgmState.battle=false;
+  pauseBgmState.boss=false;
+}
+
+function canPauseGame(){
+  if(gameOver) return false;
+  if(startOverlay && !startOverlay.classList.contains("hidden")) return false;
+  if(unlockOverlay && !unlockOverlay.classList.contains("hidden")) return false;
+  if(document.getElementById("end-illustration-overlay")) return false;
+  return !!(waveInProgress || raidMode || tutorialMode);
+}
+
+function updatePauseUI(){
+  if(!pauseButton){
+    pauseButton=document.getElementById("pause-button");
+  }
+  if(!pauseOverlay){
+    pauseOverlay=document.getElementById("pause-overlay");
+  }
+
+  const usable=canPauseGame();
+
+  if(pauseButton){
+    if(usable){
+      pauseButton.classList.remove("hidden");
+      pauseButton.hidden=false;
+      pauseButton.setAttribute("aria-hidden","false");
+      if(isPaused){
+        pauseButton.title="계속하기";
+        pauseButton.setAttribute("aria-label","계속하기");
+      }else{
+        pauseButton.title="일시정지";
+        pauseButton.setAttribute("aria-label","일시정지");
+      }
+    }else{
+      pauseButton.classList.add("hidden");
+      pauseButton.hidden=true;
+      pauseButton.setAttribute("aria-hidden","true");
+    }
+  }
+
+  if(pauseOverlay){
+    if(isPaused && usable){
+      pauseOverlay.classList.remove("hidden");
+      pauseOverlay.setAttribute("aria-hidden","false");
+    }else{
+      pauseOverlay.classList.add("hidden");
+      pauseOverlay.setAttribute("aria-hidden","true");
+    }
+  }
+}
+
+function setGamePaused(paused){
+  const next=!!paused;
+  if(next===isPaused){
+    updatePauseUI();
+    return;
+  }
+
+  if(next){
+    if(!canPauseGame()) return;
+    isPaused=true;
+    pauseStartedAt=Date.now();
+    pausePausableTimeouts();
+    pauseGameBgm();
+  }else{
+    if(isPaused){
+      pauseAccumulatedMs+=Date.now()-pauseStartedAt;
+    }
+    isPaused=false;
+    pauseStartedAt=0;
+    resumePausableTimeouts();
+    resumeGameBgm();
+  }
+
+  updatePauseUI();
+}
+
+function toggleGamePaused(){
+  setGamePaused(!isPaused);
+}
+
+function forceUnpauseGame(){
+  if(isPaused){
+    pauseAccumulatedMs+=Date.now()-pauseStartedAt;
+    isPaused=false;
+    pauseStartedAt=0;
+    resumePausableTimeouts();
+    resumeGameBgm();
+  }
+  updatePauseUI();
+}
+
+function initPauseControls(){
+  pauseButton=document.getElementById("pause-button");
+  pauseOverlay=document.getElementById("pause-overlay");
+  if(pauseButton){
+    pauseButton.addEventListener("click",()=>{
+      playSfx("click_ui");
+      toggleGamePaused();
+    });
+  }
+  const resumeButton=document.getElementById("pause-resume-button");
+  if(resumeButton){
+    resumeButton.addEventListener("click",()=>{
+      playSfx("click_ui");
+      setGamePaused(false);
+    });
+  }
+  updatePauseUI();
+}
 
 let missedWords = [];
 let missedFeatureCounts = {};
@@ -677,14 +950,14 @@ const WAVE_CONFIG = {
   6:{zombieCount:22,zombieHP:480,spawnInterval:2100},
   7:{zombieCount:26,zombieHP:560,spawnInterval:2000},
   8:{zombieCount:28,zombieHP:650,spawnInterval:1900},
-  9:{zombieCount:44,zombieHP:620,spawnInterval:1200}
+  9:{zombieCount:34,zombieHP:620,spawnInterval:1350}
 };
 
 const WAVE_ENEMY_MIX = {
   1:{normal:10}, 2:{normal:13}, 3:{normal:16}, 4:{normal:18}, 5:{normal:20}, 6:{normal:22},
   7:{normal:16,runner:3,breaker:2,resilient:2,bomber:3},
   8:{normal:14,runner:4,breaker:3,resilient:3,bomber:4},
-  9:{normal:20,runner:7,breaker:5,resilient:5,bomber:7}
+  9:{normal:15,runner:5,breaker:4,resilient:4,bomber:6}
 };
 let waveEnemyTypeBag = [];
 
@@ -993,7 +1266,7 @@ function buildUnlockPlantHTML(type){
 }
 plantButtons.forEach(button=>button.addEventListener("click",function(){
   playSfx("click_ui");
-  if(gameOver||button.disabled) return;
+  if(gameOver||isPaused||button.disabled) return;
   if(isTutorialGuideBlockingPlant(button.dataset.plant)) return;
   removeMode=false; removeButton.classList.remove("selected");
   selectedPlant=button.dataset.plant; selectedCost=Number(button.dataset.cost);
@@ -1029,7 +1302,7 @@ function updateRaidRefundUI(){
 
 removeButton.addEventListener("click",function(){
   playSfx("click_ui");
-  if(gameOver) return;
+  if(gameOver||isPaused) return;
   removeMode=true; selectedPlant=null; selectedCost=0;
   plantButtons.forEach(button=>button.classList.remove("selected"));
   removeButton.classList.add("selected");
@@ -1137,84 +1410,131 @@ function createProjectileElement(plantType,config,extraClass=""){
 // 실제 명중 판정을 담당하는 비행 투사체.
 // 식물 종류별로 속도/크기를 다르게 하고, 움직이는 좀비를 일정 속도로 추적한다.
 // 목표에 실제로 닿은 순간에만 onHit 콜백을 실행한다.
+// 개별 rAF 없이 activeProjectiles + gameLoop 일괄 업데이트.
 function createFlyingProjectile(row,column,target,plantType,onHit,options={}){
   const baseConfig=PROJECTILE_CONFIG[plantType];
   if(!baseConfig||!target||!target.alive)return;
 
   const config={...baseConfig,...options};
-  const projectile=createProjectileElement(plantType,config);
+  const element=createProjectileElement(plantType,config);
 
   const startX=column*CELL_SIZE+(config.startOffsetX??PROJECTILE_START_OFFSET_X);
   const startY=row*CELL_SIZE+(config.startOffsetY??PROJECTILE_START_OFFSET_Y);
-  const projectileSpeed=config.speed;
-  const hitDistance=config.hitDistance;
 
-  let currentX=startX;
-  let currentY=startY;
-  let lastFrameTime=null;
+  element.style.left=startX+"px";
+  element.style.top=startY+"px";
+  element.style.width=config.size+"px";
+  element.style.height=config.size+"px";
+  element.style.transform="translate(-50%,-50%)";
+  element.style.filter=config.glow||"none";
 
-  projectile.style.left=currentX+"px";
-  projectile.style.top=currentY+"px";
-  projectile.style.width=config.size+"px";
-  projectile.style.height=config.size+"px";
-  projectile.style.transform="translate(-50%,-50%)";
-  projectile.style.filter=config.glow||"none";
+  board.appendChild(element);
 
-  board.appendChild(projectile);
+  activeProjectiles.push({
+    element,
+    target,
+    onHit,
+    config,
+    speed:config.speed,
+    hitDistance:config.hitDistance,
+    x:startX,
+    y:startY,
+    lastFrameTime:null
+  });
+}
 
-  function moveProjectile(currentTime){
-    if(
-      !target||
-      !target.alive||
-      !target.element||
-      !target.element.parentElement
-    ){
-      if(projectile.parentElement)projectile.remove();
-      return;
-    }
+function clearActiveProjectiles(){
+  for(let i=0;i<activeProjectiles.length;i++){
+    const el=activeProjectiles[i].element;
+    if(el&&el.parentElement)el.remove();
+  }
+  activeProjectiles.length=0;
+}
 
-    if(lastFrameTime===null){
-      lastFrameTime=currentTime;
-      requestAnimationFrame(moveProjectile);
-      return;
-    }
+/** @returns {boolean} true면 다음 프레임에도 유지 */
+function stepActiveProjectile(p,currentTime){
+  const target=p.target;
+  const element=p.element;
 
-    const delta=Math.min((currentTime-lastFrameTime)/1000,0.05);
-    lastFrameTime=currentTime;
-
-    const targetX=target.x+(config.targetOffsetX??14);
-    const targetY=target.row*CELL_SIZE+(config.targetOffsetY??25);
-    const dx=targetX-currentX;
-    const dy=targetY-currentY;
-    const distance=Math.hypot(dx,dy);
-    const step=projectileSpeed*delta;
-
-    if(distance<=Math.max(hitDistance,step)){
-      projectile.style.left=targetX+"px";
-      projectile.style.top=targetY+"px";
-
-      if(projectile.parentElement)projectile.remove();
-      if(target.alive&&typeof onHit==="function")onHit(target);
-      return;
-    }
-
-    if(distance>0){
-      currentX+=(dx/distance)*step;
-      currentY+=(dy/distance)*step;
-    }
-
-    projectile.style.left=currentX+"px";
-    projectile.style.top=currentY+"px";
-
-    requestAnimationFrame(moveProjectile);
+  if(
+    !target||
+    !target.alive||
+    !target.element||
+    !target.element.parentElement
+  ){
+    if(element&&element.parentElement)element.remove();
+    return false;
   }
 
-  requestAnimationFrame(moveProjectile);
+  if(p.lastFrameTime===null){
+    p.lastFrameTime=currentTime;
+    return true;
+  }
+
+  const delta=Math.min((currentTime-p.lastFrameTime)/1000,0.05);
+  p.lastFrameTime=currentTime;
+
+  const targetX=target.x+(p.config.targetOffsetX??14);
+  const targetY=target.row*CELL_SIZE+(p.config.targetOffsetY??25);
+  const dx=targetX-p.x;
+  const dy=targetY-p.y;
+  const distance=Math.hypot(dx,dy);
+  const step=p.speed*delta;
+
+  if(distance<=Math.max(p.hitDistance,step)){
+    if(!PERF_DIAG.disableProjectileVisual){
+      element.style.left=targetX+"px";
+      element.style.top=targetY+"px";
+    }
+    if(element.parentElement)element.remove();
+    if(target.alive&&typeof p.onHit==="function")p.onHit(target);
+    return false;
+  }
+
+  if(distance>0){
+    p.x+=(dx/distance)*step;
+    p.y+=(dy/distance)*step;
+  }
+
+  if(!PERF_DIAG.disableProjectileVisual){
+    element.style.left=p.x+"px";
+    element.style.top=p.y+"px";
+  }
+
+  return true;
+}
+
+function updateActiveProjectiles(currentTime){
+  if(isPaused){
+    for(let i=0;i<activeProjectiles.length;i++){
+      activeProjectiles[i].lastFrameTime=null;
+    }
+    return;
+  }
+
+  const _pt0=PERF_DIAG.enabled?perfNow():0;
+  let write=0;
+  for(let i=0;i<activeProjectiles.length;i++){
+    const p=activeProjectiles[i];
+    if(stepActiveProjectile(p,currentTime)){
+      activeProjectiles[write++]=p;
+    }
+  }
+  activeProjectiles.length=write;
+
+  if(PERF_DIAG.enabled){
+    PERF_DIAG.tProjectile+=perfNow()-_pt0;
+    const n=activeProjectiles.length;
+    if(n>PERF_DIAG.maxProjectiles)PERF_DIAG.maxProjectiles=n;
+    PERF_DIAG.projectileSamples++;
+    PERF_DIAG.projectileSum+=n;
+  }
 }
 
 // RAID 보스 전용 비행 투사체.
 // 일반 좀비와 달리 보스는 5레인 전체를 차지하므로,
 // 발사한 식물의 레인 높이를 향해 일정 속도로 날아간다.
+// (일반 Wave와 분리 — 개별 rAF 유지)
 function createRaidFlyingProjectile(row,column,plantType,onHit,options={}){
   const baseConfig=PROJECTILE_CONFIG[plantType];
   if(!baseConfig||!raidMode||!raidBoss||!raidBoss.alive)return;
@@ -1241,13 +1561,23 @@ function createRaidFlyingProjectile(row,column,plantType,onHit,options={}){
   board.appendChild(projectile);
 
   function moveRaidProjectile(currentTime){
+    const _pt0=PERF_DIAG.enabled?perfNow():0;
     if(!raidMode||!raidBoss||!raidBoss.alive){
       if(projectile.parentElement)projectile.remove();
+      if(PERF_DIAG.enabled)PERF_DIAG.tProjectile+=perfNow()-_pt0;
+      return;
+    }
+
+    if(isPaused){
+      lastFrameTime=null;
+      if(PERF_DIAG.enabled)PERF_DIAG.tProjectile+=perfNow()-_pt0;
+      requestAnimationFrame(moveRaidProjectile);
       return;
     }
 
     if(lastFrameTime===null){
       lastFrameTime=currentTime;
+      if(PERF_DIAG.enabled)PERF_DIAG.tProjectile+=perfNow()-_pt0;
       requestAnimationFrame(moveRaidProjectile);
       return;
     }
@@ -1263,10 +1593,13 @@ function createRaidFlyingProjectile(row,column,plantType,onHit,options={}){
     const step=projectileSpeed*delta;
 
     if(distance<=Math.max(hitDistance,step)){
-      projectile.style.left=targetX+"px";
-      projectile.style.top=targetY+"px";
+      if(!PERF_DIAG.disableProjectileVisual){
+        projectile.style.left=targetX+"px";
+        projectile.style.top=targetY+"px";
+      }
       if(projectile.parentElement)projectile.remove();
       if(raidBoss&&raidBoss.alive&&typeof onHit==="function")onHit();
+      if(PERF_DIAG.enabled)PERF_DIAG.tProjectile+=perfNow()-_pt0;
       return;
     }
 
@@ -1275,9 +1608,12 @@ function createRaidFlyingProjectile(row,column,plantType,onHit,options={}){
       currentY+=(dy/distance)*step;
     }
 
-    projectile.style.left=currentX+"px";
-    projectile.style.top=currentY+"px";
+    if(!PERF_DIAG.disableProjectileVisual){
+      projectile.style.left=currentX+"px";
+      projectile.style.top=currentY+"px";
+    }
 
+    if(PERF_DIAG.enabled)PERF_DIAG.tProjectile+=perfNow()-_pt0;
     requestAnimationFrame(moveRaidProjectile);
   }
 
@@ -1285,6 +1621,9 @@ function createRaidFlyingProjectile(row,column,plantType,onHit,options={}){
 }
 
 function createDamageNumber(zombie,damage,extraClass=""){
+  // 일반 Wave(W1~W9): floating damage number DOM 미생성 (판정/HP는 damageZombie에서 유지).
+  // FINAL BOSS 숫자는 createRaidDamageNumber() 전용 경로 — 여기로 들어오지 않음.
+  if(!raidMode)return;
   if(!zombie||!zombie.element) return;
   const number=document.createElement("div"); number.classList.add("damage-number");
   if(extraClass) number.classList.add(extraClass);
@@ -1436,7 +1775,7 @@ const PLANT_IDLE_MOTION_CLASS = {
 function placePlant(cell,type){
   const data=PLANT_DB[type]; if(!data) return;
   cell.dataset.plant="true"; cell.dataset.plantType=type; cell.dataset.plantHp=data.hp;
-  cell.dataset.lastAttack="0"; cell.dataset.lastEnergyTime=Date.now(); cell.dataset.lastSupportTime=Date.now();
+  cell.dataset.lastAttack="0"; cell.dataset.lastEnergyTime=nowGame(); cell.dataset.lastSupportTime=nowGame();
   applyPlantCellColor(cell,type);
 
   const plant=document.createElement("div");
@@ -1479,6 +1818,7 @@ function refreshStartMarkers(){
 }
 
 function createBoard(){
+  clearActiveProjectiles();
   const keepBossBody=
     raidMode&&raidBoss?.body?.isConnected
       ? raidBoss.body
@@ -1488,7 +1828,7 @@ function createBoard(){
   for(let i=0;i<BOARD_ROWS*BOARD_COLUMNS;i++){
     const cell=document.createElement("div"); cell.classList.add("cell"); cell.dataset.index=i;
     cell.addEventListener("click",function(){
-      if(gameOver)return;
+      if(gameOver||isPaused)return;
       if(removeMode){if(cell.dataset.plant==="true") removePlantFromCell(cell,true);return;}
       if(!selectedPlant||cell.dataset.plant==="true")return;
       if(isTutorialGuideBlockingCell(cell))return;
@@ -1513,6 +1853,7 @@ function createBoard(){
   if(raidMode&&raidBoss?.hud?.isConnected){
     mountRaidBossHud(raidBoss.hud);
   }
+  boardCells=Array.from(board.querySelectorAll(".cell"));
 }
 
 function getWordFeatures(wordData){
@@ -1570,18 +1911,48 @@ function createZombie(wordData,baseZombieHP,baseSpeed,enemyType="normal"){
   const wordText=element.querySelector(".zombie-word-text");
   if(wordText)wordText.style.transition="filter 0.12s linear, opacity 0.12s linear";
 
-  const zombie={wordData,enemyType,enemyName:enemyData.name,features:getWordFeatures(wordData),hp:actualHP,maxHp:actualHP,alive:true,exploded:false,row,x:BOARD_WIDTH+ZOMBIE_APPROACH_DISTANCE,baseSpeed:actualSpeed,biteDamage:enemyData.biteDamage,statusDurationMultiplier:enemyData.statusDurationMultiplier,lastBiteTime:0,lastUpdateTime:Date.now(),frozenUntil:0,slowedUntil:0,slowMultiplier:1,dotEndTime:0,dotNextTick:0,dotTickInterval:0,dotDamage:0,element};
+  const zombie={wordData,enemyType,enemyName:enemyData.name,features:getWordFeatures(wordData),hp:actualHP,maxHp:actualHP,alive:true,exploded:false,row,x:BOARD_WIDTH+ZOMBIE_APPROACH_DISTANCE,baseSpeed:actualSpeed,biteDamage:enemyData.biteDamage,statusDurationMultiplier:enemyData.statusDurationMultiplier,lastBiteTime:0,lastUpdateTime:nowGame(),frozenUntil:0,slowedUntil:0,slowMultiplier:1,dotEndTime:0,dotNextTick:0,dotTickInterval:0,dotDamage:0,element,wordTextEl:wordText,approachBlurStep:null};
   zombies.push(zombie);board.appendChild(element);updateZombiePosition(zombie);updateZombieApproachAppearance(zombie);
 }
+/** 접근 blur를 0~4단계로만 갱신 (매 프레임 style 쓰기를 줄임). 선명해지는 의미는 유지. */
 function updateZombieApproachAppearance(zombie){
-  if(!zombie||!zombie.element)return;const text=zombie.element.querySelector(".zombie-word-text");if(!text)return;
-  if(zombie.x<=BOARD_WIDTH){text.style.filter="blur(0px)";text.style.opacity="1";return;}
-  const outsideDistance=Math.max(0,zombie.x-BOARD_WIDTH),ratio=Math.min(1,outsideDistance/ZOMBIE_APPROACH_DISTANCE);
-  text.style.filter=`blur(${(MAX_APPROACH_BLUR*ratio).toFixed(2)}px)`;text.style.opacity=(1-0.35*ratio).toFixed(2);
+  if(PERF_DIAG.enabled)PERF_DIAG.calls.updateZombieApproachAppearance++;
+  if(PERF_DIAG.disableZombieApproachAppearance)return;
+  if(!zombie||!zombie.element)return;
+  const text=zombie.wordTextEl||(zombie.wordTextEl=zombie.element.querySelector(".zombie-word-text"));
+  if(!text)return;
+
+  if(zombie.x<=BOARD_WIDTH){
+    if(zombie.approachBlurStep!==0){
+      text.style.filter="blur(0px)";
+      text.style.opacity="1";
+      zombie.approachBlurStep=0;
+    }
+    return;
+  }
+
+  const outsideDistance=Math.max(0,zombie.x-BOARD_WIDTH);
+  const ratio=Math.min(1,outsideDistance/ZOMBIE_APPROACH_DISTANCE);
+  const step=Math.round(ratio*4);
+
+  if(zombie.approachBlurStep===step)return;
+  zombie.approachBlurStep=step;
+
+  const t=step/4;
+  text.style.filter=`blur(${(MAX_APPROACH_BLUR*t).toFixed(2)}px)`;
+  text.style.opacity=(1-0.35*t).toFixed(2);
 }
+function getWaveZombieBaseSpeed(wave=currentWave){
+  let speed=ZOMBIE_BASE_SPEED;
+  if(wave>=1 && wave<=3){
+    speed*=EARLY_WAVE_SPEED_FACTOR;
+  }
+  return speed;
+}
+
 function spawnZombie(){
   if(gameOver)return;const config=WAVE_CONFIG[currentWave],wordData=getNextWordData(),enemyType=getNextEnemyType();
-  if(config&&wordData)createZombie(wordData,config.zombieHP,ZOMBIE_BASE_SPEED,enemyType);
+  if(config&&wordData)createZombie(wordData,config.zombieHP,getWaveZombieBaseSpeed(currentWave),enemyType);
 }
 function spawnTutorialZombie(){
   if(!tutorialMode||tutorialSpawnIndex>=TUTORIAL_WORDS.length)return;
@@ -1976,6 +2347,9 @@ function playZombieBiteAnimation(zombie,targetCell){
   },560);
 }
 function updateZombieLabelOffsets(){
+  if(PERF_DIAG.enabled)PERF_DIAG.calls.updateZombieLabelOffsets++;
+  if(PERF_DIAG.disableZombieApproachAppearance)return;
+  perfCountZombiesFilter();
   const aliveZombies=zombies.filter(z=>z.alive&&z.element);
   aliveZombies.forEach(z=>{const l=z.element.querySelector(":scope > div:first-child");if(l)l.style.top="-14px";});
   for(let row=0;row<BOARD_ROWS;row++){
@@ -2099,7 +2473,7 @@ function triggerBomberExplosion(zombie){
   if(!zombie||zombie.exploded||zombie.enemyType!=="bomber")return;zombie.exploded=true;const data=ENEMY_TYPES.bomber;
   const explosionX=zombie.x+ZOMBIE_WIDTH/2,explosionY=zombie.row*CELL_SIZE+CELL_SIZE/2;
   createEffect("💣💥",zombie.x+5,zombie.row*CELL_SIZE+5,"heavy-effect",800);createEffect("💥",zombie.x-20,zombie.row*CELL_SIZE-10,"explosion-effect",850);
-  const cells=board.querySelectorAll(".cell");
+  const cells=boardCells;
   cells.forEach((cell,index)=>{if(cell.dataset.plant!=="true")return;const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;const px=column*CELL_SIZE+CELL_SIZE/2,py=row*CELL_SIZE+CELL_SIZE/2;const distance=Math.hypot(px-explosionX,py-explosionY);if(distance>data.explosionRadius)return;let damage=distance<=data.explosionInnerRadius?data.explosionInnerDamage:data.explosionOuterDamage;damage*=1-getShieldReduction(index,cells);let hp=Number(cell.dataset.plantHp)-damage;cell.dataset.plantHp=hp;updatePlantHPBar(cell);createPlantDamageNumber(index,damage);createEffect("🔥",column*CELL_SIZE+25,row*CELL_SIZE+20,"explosion-effect",550);if(hp<=0)removePlantFromCell(cell,false);});
 }
 function killZombie(zombie){
@@ -2114,6 +2488,7 @@ function killZombie(zombie){
   /* 게임 판정에서는 즉시 사망 처리하되,
      화면에서는 짧은 퇴장 모션 후 제거한다. */
   zombie.alive=false;
+  invalidateFrameTargetCaches();
 
   if(zombie.element&&zombie.element.parentElement){
     zombie.element.classList.remove(
@@ -2151,25 +2526,404 @@ function killZombie(zombie){
   checkRoundEnd();
 }
 
-function getCompatibleTargets(row,feature,column){const plantX=column*CELL_SIZE;return zombies.filter(z=>z.alive&&z.row===row&&z.x<BOARD_WIDTH&&z.x>=plantX&&z.features.includes(feature)).sort((a,b)=>a.x-b.x);}
-function getAllLaneTargetsAhead(row,column){const plantX=column*CELL_SIZE;return zombies.filter(z=>z.alive&&z.row===row&&z.x<BOARD_WIDTH&&z.x>=plantX).sort((a,b)=>a.x-b.x);}
+/* =========================================================
+   PERF DIAG (진단 전용 — 게임 판정/밸런스 변경 없음)
+   콘솔:
+     __PERF_DIAG__                        상태/플래그
+     __PERF_DIAG__.help()                 사용법
+     __PERF_DIAG__.disableSupportVisual = true
+     __PERF_DIAG__.disableZombieApproachAppearance = true
+     __PERF_DIAG__.disableProjectileVisual = true
+     __PERF_DIAG__.disablePlantAttack = true
+     __PERF_DIAG__.reset()
+   ========================================================= */
+const PERF_DIAG = {
+  enabled:true,
+  disableSupportVisual:false,
+  disableZombieApproachAppearance:false,
+  disableProjectileVisual:false,
+  disablePlantAttack:false,
+
+  frames:0,
+  tSupport:0,
+  tZombie:0,
+  tLabel:0,
+  tStatus:0,
+  tTarget:0,
+  tProjectile:0,
+  tOther:0,
+  tFrame:0,
+  frameDeltaSum:0,
+  lastFrameWall:0,
+  onBoardSum:0,
+  maxProjectiles:0,
+  projectileSum:0,
+  projectileSamples:0,
+  windowStart:0,
+  lastLogAt:0,
+
+  calls:{
+    getCompatibleTargets:0,
+    isSupportActive:0,
+    getAttackSpeedMultiplier:0,
+    zombiesFilter:0,
+    updateZombieLabelOffsets:0,
+    updateZombieApproachAppearance:0
+  },
+
+  reset(){
+    this.frames=0;
+    this.tSupport=0;this.tZombie=0;this.tLabel=0;this.tStatus=0;
+    this.tTarget=0;this.tProjectile=0;this.tOther=0;this.tFrame=0;
+    this.frameDeltaSum=0;this.onBoardSum=0;
+    this.maxProjectiles=0;this.projectileSum=0;this.projectileSamples=0;
+    this.windowStart=performance.now();
+    this.lastLogAt=this.windowStart;
+    this.lastFrameWall=0;
+    const c=this.calls;
+    c.getCompatibleTargets=0;c.isSupportActive=0;c.getAttackSpeedMultiplier=0;
+    c.zombiesFilter=0;c.updateZombieLabelOffsets=0;c.updateZombieApproachAppearance=0;
+  },
+
+  help(){
+    console.info(
+      "[perf-diag] flags (true=해당 처리 임시 OFF):\n"+
+      "  __PERF_DIAG__.disableSupportVisual\n"+
+      "  __PERF_DIAG__.disableZombieApproachAppearance\n"+
+      "  __PERF_DIAG__.disableProjectileVisual\n"+
+      "  __PERF_DIAG__.disablePlantAttack\n"+
+      "비교 시나리오: 레인 내 좀비 1/2/3/5+ 마리에 맞춰 로그의 onBoard 값을 확인하세요.\n"+
+      "projectiles: activeProjectiles.length / 로그의 waveProjRAF=0 이면 일반 투사체 개별 rAF 없음.\n"+
+      "__PERF_DIAG__.reset() 로 집계 초기화."
+    );
+  },
+
+  countOnBoard(){
+    let n=0;
+    for(let i=0;i<zombies.length;i++){
+      const z=zombies[i];
+      if(z.alive&&z.x<BOARD_WIDTH)n++;
+    }
+    return n;
+  }
+};
+
+if(typeof window!=="undefined"){
+  window.__PERF_DIAG__ = PERF_DIAG;
+  console.info("[perf-diag] 진단 모드 활성 — 콘솔에서 __PERF_DIAG__.help() 확인");
+}
+
+function perfNow(){
+  return performance.now();
+}
+
+function perfDiagTickFrame(frameMs,onBoard){
+  if(!PERF_DIAG.enabled)return;
+  const wall=perfNow();
+  if(!PERF_DIAG.windowStart){
+    PERF_DIAG.windowStart=wall;
+    PERF_DIAG.lastLogAt=wall;
+  }
+  if(PERF_DIAG.lastFrameWall>0){
+    PERF_DIAG.frameDeltaSum+=(wall-PERF_DIAG.lastFrameWall);
+  }
+  PERF_DIAG.lastFrameWall=wall;
+  PERF_DIAG.frames++;
+  PERF_DIAG.tFrame+=frameMs;
+  PERF_DIAG.onBoardSum+=onBoard;
+
+  if(wall-PERF_DIAG.lastLogAt<1000)return;
+
+  const f=Math.max(1,PERF_DIAG.frames);
+  const elapsed=(wall-PERF_DIAG.windowStart)/1000;
+  const avg=k=>PERF_DIAG[k]/f;
+  const fps=PERF_DIAG.frameDeltaSum>0?(1000*f)/PERF_DIAG.frameDeltaSum:0;
+  const c=PERF_DIAG.calls;
+  const perSec=v=>(v/Math.max(0.001,elapsed)).toFixed(0);
+
+  console.info(
+    `[perf-diag] FPS ${fps.toFixed(1)} | Frame ${avg("tFrame").toFixed(2)}ms | onBoard≈${(PERF_DIAG.onBoardSum/f).toFixed(1)} | `+
+    `support ${avg("tSupport").toFixed(2)} | zombie ${avg("tZombie").toFixed(2)} | label ${avg("tLabel").toFixed(2)} | `+
+    `status ${avg("tStatus").toFixed(2)} | target ${avg("tTarget").toFixed(2)} | projectile ${avg("tProjectile").toFixed(2)} | etc ${avg("tOther").toFixed(2)}`
+  );
+  const projAvg=PERF_DIAG.projectileSamples
+    ?(PERF_DIAG.projectileSum/PERF_DIAG.projectileSamples).toFixed(1)
+    :"0";
+  console.info(
+    `[perf-diag] calls/sec | getCompatibleTargets ${perSec(c.getCompatibleTargets)} | isSupportActive ${perSec(c.isSupportActive)} | `+
+    `getAttackSpeedMultiplier ${perSec(c.getAttackSpeedMultiplier)} | zombies.filter ${perSec(c.zombiesFilter)} | `+
+    `labelOffsets ${perSec(c.updateZombieLabelOffsets)} | approach ${perSec(c.updateZombieApproachAppearance)} | `+
+    `projectiles avg=${projAvg} max=${PERF_DIAG.maxProjectiles} active=${typeof activeProjectiles!=="undefined"?activeProjectiles.length:0} `+
+    `waveProjRAF=0 (batched) | `+
+    `flags supportVis=${PERF_DIAG.disableSupportVisual?"OFF":"ON"} approach=${PERF_DIAG.disableZombieApproachAppearance?"OFF":"ON"} `+
+    `projVis=${PERF_DIAG.disableProjectileVisual?"OFF":"ON"} attack=${PERF_DIAG.disablePlantAttack?"OFF":"ON"}`
+  );
+
+  PERF_DIAG.reset();
+  PERF_DIAG.lastFrameWall=wall;
+}
+
+function perfCountZombiesFilter(){
+  if(PERF_DIAG.enabled)PERF_DIAG.calls.zombiesFilter++;
+}
+
+/* =========================================================
+   Frame combat cache (2차 성능)
+   - 판정 로직은 동일, 같은 프레임 내 중복 filter/scan만 제거
+   - 좀비 사망·이동 후 위치 의존 캐시는 invalidate
+   ========================================================= */
+const SUPPORT_VISUAL_INTERVAL_MS = 120;
+/** 고모음 버프 시 가능한 최단 공격주기 배율(0.75). 쿨다운 조기 스킵용 — 실제 배율 계산은 기존과 동일 */
+const FASTEST_ATTACK_SPEED_MULT = PLANT_DB["고모음"].special.multiplier;
+const NEARBY_CELL_CACHE = new Map();
+let lastSupportVisualAt = -Infinity;
+let frameCombat = null;
+
+function beginFrameCombatCache(){
+  frameCombat={
+    alive:null,
+    onBoard:null,
+    byLaneOnBoard:null,
+    compatible:new Map(),
+    laneAhead:new Map(),
+    supportActive:new Map(),
+    featureOnBoard:new Map(),
+    attackSpeedMap:null,
+    shieldMap:null
+  };
+}
+
+function invalidateFrameTargetCaches(){
+  if(!frameCombat)return;
+  frameCombat.alive=null;
+  frameCombat.onBoard=null;
+  frameCombat.byLaneOnBoard=null;
+  frameCombat.compatible.clear();
+  frameCombat.laneAhead.clear();
+  frameCombat.supportActive.clear();
+  frameCombat.featureOnBoard.clear();
+  frameCombat.attackSpeedMap=null;
+  frameCombat.shieldMap=null;
+}
+
+function getFrameAliveZombies(){
+  if(!frameCombat){
+    perfCountZombiesFilter();
+    return zombies.filter(z=>z.alive);
+  }
+  if(!frameCombat.alive){
+    perfCountZombiesFilter();
+    frameCombat.alive=zombies.filter(z=>z.alive);
+  }
+  return frameCombat.alive;
+}
+
+function getFrameAliveOnBoard(){
+  if(!frameCombat){
+    perfCountZombiesFilter();
+    return zombies.filter(z=>z.alive&&z.x<BOARD_WIDTH);
+  }
+  if(!frameCombat.onBoard){
+    frameCombat.onBoard=getFrameAliveZombies().filter(z=>z.x<BOARD_WIDTH);
+  }
+  return frameCombat.onBoard;
+}
+
+/** 레인별 보드 안 생존 좀비 (x 오름차순). 프레임당 1회 구축 */
+function getFrameLaneOnBoard(row){
+  if(!frameCombat){
+    return getFrameAliveZombies()
+      .filter(z=>z.row===row&&z.x<BOARD_WIDTH)
+      .sort((a,b)=>a.x-b.x);
+  }
+  if(!frameCombat.byLaneOnBoard){
+    const lanes=new Array(BOARD_ROWS);
+    for(let r=0;r<BOARD_ROWS;r++)lanes[r]=[];
+    const alive=getFrameAliveZombies();
+    for(let i=0;i<alive.length;i++){
+      const z=alive[i];
+      if(z.x<BOARD_WIDTH)lanes[z.row].push(z);
+    }
+    for(let r=0;r<BOARD_ROWS;r++){
+      lanes[r].sort((a,b)=>a.x-b.x);
+    }
+    frameCombat.byLaneOnBoard=lanes;
+  }
+  return frameCombat.byLaneOnBoard[row];
+}
+
+function hasAliveOnBoardWithFeature(feature){
+  if(frameCombat&&frameCombat.featureOnBoard.has(feature)){
+    return frameCombat.featureOnBoard.get(feature);
+  }
+  const found=getFrameAliveOnBoard().some(z=>z.features.includes(feature));
+  if(frameCombat)frameCombat.featureOnBoard.set(feature,found);
+  return found;
+}
+
+function getCompatibleTargets(row,feature,column){
+  if(PERF_DIAG.enabled)PERF_DIAG.calls.getCompatibleTargets++;
+  const key=row+"|"+feature+"|"+column;
+  if(frameCombat&&frameCombat.compatible.has(key)){
+    return frameCombat.compatible.get(key);
+  }
+  const plantX=column*CELL_SIZE;
+  const lane=getFrameLaneOnBoard(row);
+  const list=[];
+  for(let i=0;i<lane.length;i++){
+    const z=lane[i];
+    if(z.x<plantX)continue;
+    if(z.features.includes(feature))list.push(z);
+  }
+  if(frameCombat)frameCombat.compatible.set(key,list);
+  return list;
+}
+
+function getAllLaneTargetsAhead(row,column){
+  const key=row+"|"+column;
+  if(frameCombat&&frameCombat.laneAhead.has(key)){
+    return frameCombat.laneAhead.get(key);
+  }
+  const plantX=column*CELL_SIZE;
+  const lane=getFrameLaneOnBoard(row);
+  const list=[];
+  for(let i=0;i<lane.length;i++){
+    const z=lane[i];
+    if(z.x>=plantX)list.push(z);
+  }
+  if(frameCombat)frameCombat.laneAhead.set(key,list);
+  return list;
+}
+
 function isSupportActive(index,feature){
+  if(PERF_DIAG.enabled)PERF_DIAG.calls.isSupportActive++;
   if(raidMode&&raidBoss&&raidBoss.alive)return raidBoss.features.includes(feature);
-  const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;return getCompatibleTargets(row,feature,column).length>0;
+  const key=index+"|"+feature;
+  if(frameCombat&&frameCombat.supportActive.has(key)){
+    return frameCombat.supportActive.get(key);
+  }
+  const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;
+  const active=getCompatibleTargets(row,feature,column).length>0;
+  if(frameCombat)frameCombat.supportActive.set(key,active);
+  return active;
 }
+
 function getNearbyCellIndices(index,radius=1){
+  const key=index+"|"+radius;
+  const cached=NEARBY_CELL_CACHE.get(key);
+  if(cached)return cached;
   const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS,result=[];
-  for(let r=row-radius;r<=row+radius;r++)for(let c=column-radius;c<=column+radius;c++){if(r>=0&&r<BOARD_ROWS&&c>=0&&c<BOARD_COLUMNS)result.push(r*BOARD_COLUMNS+c);}return result;
+  for(let r=row-radius;r<=row+radius;r++){
+    for(let c=column-radius;c<=column+radius;c++){
+      if(r>=0&&r<BOARD_ROWS&&c>=0&&c<BOARD_COLUMNS)result.push(r*BOARD_COLUMNS+c);
+    }
+  }
+  NEARBY_CELL_CACHE.set(key,result);
+  return result;
 }
+
 function updateSupportVisuals(cells){
-  cells.forEach(cell=>{const plant=cell.querySelector(".plant");if(plant){plant.classList.remove("speed-buffed");plant.classList.remove("shielded");}});
-  cells.forEach((supportCell,supportIndex)=>{const type=supportCell.dataset.plantType;if(type!=="고모음"&&type!=="원순모음")return;const data=PLANT_DB[type];if(!isSupportActive(supportIndex,data.feature))return;getNearbyCellIndices(supportIndex,data.special.radius).forEach(targetIndex=>{const targetPlant=cells[targetIndex].querySelector(".plant");if(!targetPlant)return;if(type==="고모음")targetPlant.classList.add("speed-buffed");if(type==="원순모음")targetPlant.classList.add("shielded");});});
+  const wantSpeed=new Array(cells.length).fill(false);
+  const wantShield=new Array(cells.length).fill(false);
+
+  cells.forEach((supportCell,supportIndex)=>{
+    const type=supportCell.dataset.plantType;
+    if(type!=="고모음"&&type!=="원순모음")return;
+    const data=PLANT_DB[type];
+    if(!isSupportActive(supportIndex,data.feature))return;
+    getNearbyCellIndices(supportIndex,data.special.radius).forEach(targetIndex=>{
+      if(!cells[targetIndex].querySelector(".plant"))return;
+      if(type==="고모음")wantSpeed[targetIndex]=true;
+      if(type==="원순모음")wantShield[targetIndex]=true;
+    });
+  });
+
+  cells.forEach((cell,index)=>{
+    const plant=cell.querySelector(".plant");
+    if(!plant)return;
+    const speedOn=wantSpeed[index];
+    const shieldOn=wantShield[index];
+    if(plant._visSpeedBuffed!==speedOn){
+      plant.classList.toggle("speed-buffed",speedOn);
+      plant._visSpeedBuffed=speedOn;
+    }
+    if(plant._visShielded!==shieldOn){
+      plant.classList.toggle("shielded",shieldOn);
+      plant._visShielded=shieldOn;
+    }
+  });
 }
-function getAttackSpeedMultiplier(targetIndex,cells){let multiplier=1;cells.forEach((supportCell,supportIndex)=>{if(supportCell.dataset.plantType!=="고모음")return;const data=PLANT_DB["고모음"];if(!isSupportActive(supportIndex,data.feature))return;if(getNearbyCellIndices(supportIndex,data.special.radius).includes(targetIndex))multiplier=Math.min(multiplier,data.special.multiplier);});return multiplier;}
-function getShieldReduction(targetIndex,cells){let reduction=0;cells.forEach((supportCell,supportIndex)=>{if(supportCell.dataset.plantType!=="원순모음")return;const data=PLANT_DB["원순모음"];if(!isSupportActive(supportIndex,data.feature))return;if(getNearbyCellIndices(supportIndex,data.special.radius).includes(targetIndex))reduction=Math.max(reduction,data.special.damageReduction);});return reduction;}
+
+function updateSupportPlantActiveVisuals(cells){
+  cells.forEach((cell,index)=>{
+    const type=cell.dataset.plantType,plant=cell.querySelector(".plant");
+    if(!type||!plant)return;
+    const data=PLANT_DB[type];
+    if(data.attackType!=="support"&&data.attackType!=="control"){
+      if(plant._visSupportActive){
+        plant.classList.remove("support-active");
+        plant._visSupportActive=false;
+      }
+      return;
+    }
+    let active=false;
+    if(raidMode)active=!!(raidBoss&&raidBoss.alive&&raidBoss.features.includes(data.feature));
+    else if(type==="전설모음"||type==="후설모음")active=hasAliveOnBoardWithFeature(data.feature);
+    else active=isSupportActive(index,data.feature);
+    if(plant._visSupportActive!==active){
+      plant.classList.toggle("support-active",active);
+      plant._visSupportActive=active;
+    }
+  });
+}
+
+function ensureAttackSpeedMap(cells){
+  if(frameCombat&&frameCombat.attackSpeedMap)return frameCombat.attackSpeedMap;
+  const map=new Float64Array(cells.length);
+  map.fill(1);
+  const data=PLANT_DB["고모음"];
+  for(let supportIndex=0;supportIndex<cells.length;supportIndex++){
+    if(cells[supportIndex].dataset.plantType!=="고모음")continue;
+    if(!isSupportActive(supportIndex,data.feature))continue;
+    const nearby=getNearbyCellIndices(supportIndex,data.special.radius);
+    for(let i=0;i<nearby.length;i++){
+      const ti=nearby[i];
+      if(map[ti]>data.special.multiplier)map[ti]=data.special.multiplier;
+    }
+  }
+  if(frameCombat)frameCombat.attackSpeedMap=map;
+  return map;
+}
+
+function ensureShieldMap(cells){
+  if(frameCombat&&frameCombat.shieldMap)return frameCombat.shieldMap;
+  const map=new Float64Array(cells.length);
+  const data=PLANT_DB["원순모음"];
+  for(let supportIndex=0;supportIndex<cells.length;supportIndex++){
+    if(cells[supportIndex].dataset.plantType!=="원순모음")continue;
+    if(!isSupportActive(supportIndex,data.feature))continue;
+    const nearby=getNearbyCellIndices(supportIndex,data.special.radius);
+    for(let i=0;i<nearby.length;i++){
+      const ti=nearby[i];
+      if(map[ti]<data.special.damageReduction)map[ti]=data.special.damageReduction;
+    }
+  }
+  if(frameCombat)frameCombat.shieldMap=map;
+  return map;
+}
+
+function getAttackSpeedMultiplier(targetIndex,cells){
+  if(PERF_DIAG.enabled)PERF_DIAG.calls.getAttackSpeedMultiplier++;
+  return ensureAttackSpeedMap(cells)[targetIndex];
+}
+function getShieldReduction(targetIndex,cells){
+  return ensureShieldMap(cells)[targetIndex];
+}
 
 function getGlobalChainTargets(primary,feature,maxTargets){
-  const others=zombies.filter(z=>z.alive&&z!==primary&&z.x<BOARD_WIDTH&&z.features.includes(feature)).sort((a,b)=>Math.hypot(a.x-primary.x,(a.row-primary.row)*CELL_SIZE)-Math.hypot(b.x-primary.x,(b.row-primary.row)*CELL_SIZE));
+  const others=getFrameAliveOnBoard()
+    .filter(z=>z!==primary&&z.features.includes(feature))
+    .sort((a,b)=>Math.hypot(a.x-primary.x,(a.row-primary.row)*CELL_SIZE)-Math.hypot(b.x-primary.x,(b.row-primary.row)*CELL_SIZE));
   return [primary,...others.slice(0,maxTargets-1)];
 }
 
@@ -2192,8 +2946,7 @@ const PLANT_FIRE_MOTION_CLASS = {
 
 function triggerPlantFireMotion(row,column,plantType){
   const index=row*BOARD_COLUMNS+column;
-  const cells=board.querySelectorAll(".cell");
-  const cell=cells[index];
+  const cell=boardCells[index];
   if(!cell || cell.dataset.plantType!==plantType)return;
 
   const plant=cell.querySelector(".plant");
@@ -2370,8 +3123,8 @@ function performDotAttack(row,column,target,data){
       damageZombie(hitTarget,data.damage);
       if(!hitTarget.alive)return;
 
-      hitTarget.dotEndTime=Date.now()+data.special.duration*1000;
-      hitTarget.dotNextTick=Date.now()+data.special.tickInterval*1000;
+      hitTarget.dotEndTime=nowGame()+data.special.duration*1000;
+      hitTarget.dotNextTick=nowGame()+data.special.tickInterval*1000;
       hitTarget.dotTickInterval=data.special.tickInterval*1000;
       hitTarget.dotDamage=data.special.tickDamage;
 
@@ -2739,7 +3492,7 @@ function setRaidBossMotionPaused(isPaused){
   );
 }
 
-function updateRaidBossStatusVisuals(now=Date.now()){
+function updateRaidBossStatusVisuals(now=nowGame()){
   if(!raidBoss || !raidBoss.body) return;
 
   raidBoss.body.classList.toggle(
@@ -2780,7 +3533,7 @@ function triggerRaidBossStatusBurst(type){
   }
 }
 
-function updateRaidBossUI(now=Date.now()){
+function updateRaidBossUI(now=nowGame()){
   if(!raidBoss||!raidBoss.hud)return;
 
   const hpFill=raidBoss.hud.querySelector(".raid-hp-fill");
@@ -2846,7 +3599,7 @@ function updateRaidBossUI(now=Date.now()){
   updateRaidBossBodyPosition();
 }
 
-function changeRaidBossWord(now=Date.now()){
+function changeRaidBossWord(now=nowGame()){
   if(!raidMode||!raidBoss||!raidBoss.alive)return;
   const wordData=getNextRaidWord();
   if(!wordData)return;
@@ -2878,7 +3631,7 @@ function changeRaidBossWord(now=Date.now()){
 }
 
 /** 실제 nextWordChangeAt 기준 3초 전 경고 1회 */
-function processRaidWordChangeWarning(now=Date.now()){
+function processRaidWordChangeWarning(now=nowGame()){
   if(!raidMode||!raidBoss||!raidBoss.alive) return;
   if(!raidBoss.wordData||!raidBoss.nextWordChangeAt) return;
 
@@ -2893,7 +3646,11 @@ function processRaidWordChangeWarning(now=Date.now()){
 
 function clearBossWordWarningElements(){
   if(raidBossWordWarnTimer){
-    clearTimeout(raidBossWordWarnTimer);
+    if(typeof raidBossWordWarnTimer==="object" && typeof raidBossWordWarnTimer.clear==="function"){
+      raidBossWordWarnTimer.clear();
+    }else{
+      clearTimeout(raidBossWordWarnTimer);
+    }
     raidBossWordWarnTimer=null;
   }
   document.querySelectorAll(".raid-word-warn").forEach((el)=>el.remove());
@@ -2927,7 +3684,7 @@ function showBossWordWarning(){
   playSfx("boss_word_warn");
 
   // 3초 동안 유지 (실제 변경 시 clearBossWordWarningElements로 즉시 제거)
-  raidBossWordWarnTimer=setTimeout(()=>{
+  raidBossWordWarnTimer=setPausableTimeout(()=>{
     if(warn.parentElement) warn.remove();
     raidBossWordWarnTimer=null;
   },RAID_WORD_WARN_AHEAD_MS);
@@ -3002,7 +3759,7 @@ function createRaidDamageNumber(damage,extraClass=""){
 function createRaidBossHitImpact(heavy=false){
   if(!raidMode||!raidBoss||!raidBoss.alive||!board)return;
 
-  const now=Date.now();
+  const now=nowGame();
   const activeCount=board.querySelectorAll(".raid-boss-hit-impact").length;
 
   // 동시 파티클 과다 겹침 방지
@@ -3038,7 +3795,7 @@ function triggerRaidBossHitVisual(extraClass=""){
   const heavy=
     extraClass==="heavy-number" ||
     extraClass==="sniper-number";
-  const now=Date.now();
+  const now=nowGame();
 
   // flash 없음 — recoil만, 짧은 쿨다운으로 과도한 반복 방지
   if(now<(raidBoss.hitVisualCooldownUntil||0))return;
@@ -3208,8 +3965,8 @@ function performRaidPlantAttack(row,column,data){
         damageRaidBoss(data.damage);
 
         if(raidBoss&&raidBoss.alive){
-          raidBoss.dotEndTime=Date.now()+data.special.duration*1000;
-          raidBoss.dotNextTick=Date.now()+data.special.tickInterval*1000;
+          raidBoss.dotEndTime=nowGame()+data.special.duration*1000;
+          raidBoss.dotNextTick=nowGame()+data.special.tickInterval*1000;
           raidBoss.dotTickInterval=data.special.tickInterval*1000;
           raidBoss.dotDamage=data.special.tickDamage;
         }
@@ -3410,13 +4167,65 @@ function processHealing(cells, now){
   });
 }
 function processFreezePlants(cells,now){
-  if(raidMode)return;cells.forEach((cell,index)=>{if(cell.dataset.plantType!=="저모음")return;const data=PLANT_DB["저모음"],last=Number(cell.dataset.lastSupportTime);if(now-last<data.special.interval*1000)return;const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS,triggerTargets=getCompatibleTargets(row,data.feature,column);if(!triggerTargets.length)return;const targets=zombies.filter(z=>z.alive&&z.x<BOARD_WIDTH&&z.row===row);if(!targets.length)return;cell.dataset.lastSupportTime=now;targets.forEach(target=>{const duration=data.special.duration*target.statusDurationMultiplier;target.frozenUntil=Math.max(target.frozenUntil,now+duration*1000);createEffect(target.enemyType==="resilient"?"🛡❄":"🧊",target.x+25,target.row*CELL_SIZE+30,"freeze-effect",700);});createEffect("❄ 레인 정지!",column*CELL_SIZE+10,row*CELL_SIZE+10,"freeze-effect",700);});
+  if(raidMode)return;
+  cells.forEach((cell,index)=>{
+    if(cell.dataset.plantType!=="저모음")return;
+    const data=PLANT_DB["저모음"],last=Number(cell.dataset.lastSupportTime);
+    if(now-last<data.special.interval*1000)return;
+    const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;
+    const triggerTargets=getCompatibleTargets(row,data.feature,column);
+    if(!triggerTargets.length)return;
+    const targets=getFrameAliveOnBoard().filter(z=>z.row===row);
+    if(!targets.length)return;
+    cell.dataset.lastSupportTime=now;
+    targets.forEach(target=>{
+      const duration=data.special.duration*target.statusDurationMultiplier;
+      target.frozenUntil=Math.max(target.frozenUntil,now+duration*1000);
+      createEffect(target.enemyType==="resilient"?"🛡❄":"🧊",target.x+25,target.row*CELL_SIZE+30,"freeze-effect",700);
+    });
+    createEffect("❄ 레인 정지!",column*CELL_SIZE+10,row*CELL_SIZE+10,"freeze-effect",700);
+  });
 }
 function processGlobalSlowPlants(cells,now){
-  if(raidMode)return;cells.forEach((cell,index)=>{if(cell.dataset.plantType!=="후설모음")return;const data=PLANT_DB["후설모음"],last=Number(cell.dataset.lastSupportTime);if(now-last<data.special.interval*1000)return;const triggerTargets=zombies.filter(z=>z.alive&&z.x<BOARD_WIDTH&&z.features.includes(data.feature));if(!triggerTargets.length)return;const targets=zombies.filter(z=>z.alive&&z.x<BOARD_WIDTH);if(!targets.length)return;cell.dataset.lastSupportTime=now;createGlobalSlowScreen();targets.forEach(target=>{const duration=data.special.duration*target.statusDurationMultiplier;target.slowedUntil=Math.max(target.slowedUntil,now+duration*1000);target.slowMultiplier=Math.min(target.slowMultiplier,data.special.multiplier);createEffect(target.enemyType==="resilient"?"🛡🐌":"🐌",target.x+20,target.row*CELL_SIZE+25,"slow-effect",650);});const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;createEffect("🐌 전장 둔화!",column*CELL_SIZE+5,row*CELL_SIZE+10,"slow-effect",800);});
+  if(raidMode)return;
+  cells.forEach((cell,index)=>{
+    if(cell.dataset.plantType!=="후설모음")return;
+    const data=PLANT_DB["후설모음"],last=Number(cell.dataset.lastSupportTime);
+    if(now-last<data.special.interval*1000)return;
+    if(!hasAliveOnBoardWithFeature(data.feature))return;
+    const targets=getFrameAliveOnBoard();
+    if(!targets.length)return;
+    cell.dataset.lastSupportTime=now;
+    createGlobalSlowScreen();
+    targets.forEach(target=>{
+      const duration=data.special.duration*target.statusDurationMultiplier;
+      target.slowedUntil=Math.max(target.slowedUntil,now+duration*1000);
+      target.slowMultiplier=Math.min(target.slowMultiplier,data.special.multiplier);
+      createEffect(target.enemyType==="resilient"?"🛡🐌":"🐌",target.x+20,target.row*CELL_SIZE+25,"slow-effect",650);
+    });
+    const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;
+    createEffect("🐌 전장 둔화!",column*CELL_SIZE+5,row*CELL_SIZE+10,"slow-effect",800);
+  });
 }
 function processGlobalFreezePlants(cells,now){
-  if(raidMode)return;cells.forEach((cell,index)=>{if(cell.dataset.plantType!=="전설모음")return;const data=PLANT_DB["전설모음"],last=Number(cell.dataset.lastSupportTime);if(now-last<data.special.interval*1000)return;const triggerTargets=zombies.filter(z=>z.alive&&z.x<BOARD_WIDTH&&z.features.includes(data.feature));if(!triggerTargets.length)return;const targets=zombies.filter(z=>z.alive&&z.x<BOARD_WIDTH);if(!targets.length)return;cell.dataset.lastSupportTime=now;createGlobalFreezeScreen();targets.forEach(target=>{const duration=data.special.duration*target.statusDurationMultiplier;target.frozenUntil=Math.max(target.frozenUntil,now+duration*1000);createEffect(target.enemyType==="resilient"?"🛡❄":"❄",target.x+25,target.row*CELL_SIZE+25,"global-freeze-effect",700);});const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;createEffect("❄❄",column*CELL_SIZE+25,row*CELL_SIZE+20,"global-freeze-cast-effect",900);});
+  if(raidMode)return;
+  cells.forEach((cell,index)=>{
+    if(cell.dataset.plantType!=="전설모음")return;
+    const data=PLANT_DB["전설모음"],last=Number(cell.dataset.lastSupportTime);
+    if(now-last<data.special.interval*1000)return;
+    if(!hasAliveOnBoardWithFeature(data.feature))return;
+    const targets=getFrameAliveOnBoard();
+    if(!targets.length)return;
+    cell.dataset.lastSupportTime=now;
+    createGlobalFreezeScreen();
+    targets.forEach(target=>{
+      const duration=data.special.duration*target.statusDurationMultiplier;
+      target.frozenUntil=Math.max(target.frozenUntil,now+duration*1000);
+      createEffect(target.enemyType==="resilient"?"🛡❄":"❄",target.x+25,target.row*CELL_SIZE+25,"global-freeze-effect",700);
+    });
+    const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;
+    createEffect("❄❄",column*CELL_SIZE+25,row*CELL_SIZE+20,"global-freeze-cast-effect",900);
+  });
 }
 function processDots(now){zombies.forEach(z=>{if(!z.alive||z.dotEndTime<=now||now<z.dotNextTick)return;z.dotNextTick=now+z.dotTickInterval;createEffect("🔥",z.x+20,z.row*CELL_SIZE+25,"dot-effect",350);damageZombie(z,z.dotDamage,"dot-number");});}
 
@@ -3923,10 +4732,14 @@ function startRaidBossEntrance(){
   });
 
   if(raidBoss.entranceTimer){
-    clearTimeout(raidBoss.entranceTimer);
+    if(typeof raidBoss.entranceTimer==="object" && typeof raidBoss.entranceTimer.clear==="function"){
+      raidBoss.entranceTimer.clear();
+    }else{
+      clearTimeout(raidBoss.entranceTimer);
+    }
   }
 
-  raidBoss.entranceTimer=setTimeout(()=>{
+  raidBoss.entranceTimer=setPausableTimeout(()=>{
     if(!raidBoss||!raidBoss.body||!raidBoss.alive)return;
 
     const bossBody=raidBoss.body;
@@ -3945,15 +4758,19 @@ function startRaidBossEntrance(){
     destroyPlantsForRaidOpening();
 
     if(raidBoss.entranceLandTimer){
-      clearTimeout(raidBoss.entranceLandTimer);
+      if(typeof raidBoss.entranceLandTimer==="object" && typeof raidBoss.entranceLandTimer.clear==="function"){
+        raidBoss.entranceLandTimer.clear();
+      }else{
+        clearTimeout(raidBoss.entranceLandTimer);
+      }
     }
 
-    raidBoss.entranceLandTimer=setTimeout(()=>{
+    raidBoss.entranceLandTimer=setPausableTimeout(()=>{
       if(!raidBoss||!raidBoss.body)return;
       raidBoss.body.classList.remove("raid-boss-landing");
       // transform 복구 후 이동/피격/공격 모션과 충돌하지 않게 진입 종료
       raidBoss.entering=false;
-      raidBoss.lastUpdateTime=Date.now();
+      raidBoss.lastUpdateTime=nowGame();
       raidBoss.entranceTimer=null;
       raidBoss.entranceLandTimer=null;
     },LAND_MS);
@@ -3969,15 +4786,18 @@ function startRaid(){
   updateRaidRefundUI();
   gameOver=false;
   waveInProgress=true;
+  forceUnpauseGame();
+  updatePauseUI();
 
   zombies=[];
+  clearActiveProjectiles();
   waveZombieCount=0;
   resolvedZombies=0;
   raidWordBag=[];
   raidLastWordId=null;
   raidDamageSerial=0;
 
-  const now=Date.now();
+  const now=nowGame();
 
   raidBoss={
     alive:true,
@@ -4029,7 +4849,7 @@ function startRaid(){
   }
 }
 function showRaidIntro(){
-  waveInProgress=false;unlockTitle.textContent="👑 FINAL BOSS 등장";unlockContent.innerHTML=`<h2>아직 끝나지 않았습니다.</h2><p>Final Wave를 막아냈지만 마지막 적이 등장했습니다.</p><p><strong>모든 레인의 공격 식물이 하나의 보스를 공격합니다.</strong></p><p>보스의 단어는 <strong>20초마다 변경</strong>됩니다. 단어가 바뀌면 공격 가능한 음운 특징도 함께 바뀝니다.</p><p>🧊 저모음은 보스 행동을 잠시 멈추고, 🐌 후설모음은 보스의 이동 속도를 늦추며, ❄ 전설모음은 보스를 완전히 정지시킵니다.</p><p>보스 등장과 동시에 <strong>공격·지원 식물의 약 60%</strong>가 파괴됩니다. 소리꽃은 파괴되지 않습니다. 남은 소리씨앗으로 빠르게 진형을 다시 구축하세요.</p><p>🪏 <strong>RAID에서는 식물을 제거하면 구매 비용의 70%를 환불</strong>합니다. 보스 단어에 맞춰 진형을 적극적으로 재배치하세요.</p><p>⚡ <strong>RAID 유음 공명:</strong> 유음 식물들이 보스를 총 3번 공격하면 공명 추가타가 발생합니다. 연구개음·파찰음·비음도 보스전에서는 각자의 특성이 단일 대상에 맞게 강화됩니다.</p><p>보스는 약 <strong>6초마다</strong> 한 레인의 가장 앞쪽 식물에 충격파를 사용합니다.</p><p>보스는 <strong>세로 5레인 × 가로 1칸 크기</strong>로 천천히 전진합니다. 현재 보스와 맞닿은 한 열의 식물만 공격하며, 그 열을 뚫으면 다시 전진합니다. <strong>왼쪽 끝에 도달하면 즉시 패배합니다.</strong></p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="RAID 시작";unlockNextButton.dataset.action="start-raid";delete unlockNextButton.dataset.wave;
+  waveInProgress=false;forceUnpauseGame();updatePauseUI();unlockTitle.textContent="👑 FINAL BOSS 등장";unlockContent.innerHTML=`<h2>아직 끝나지 않았습니다.</h2><p>Final Wave를 막아냈지만 마지막 적이 등장했습니다.</p><p><strong>모든 레인의 공격 식물이 하나의 보스를 공격합니다.</strong></p><p>보스의 단어는 <strong>20초마다 변경</strong>됩니다. 단어가 바뀌면 공격 가능한 음운 특징도 함께 바뀝니다.</p><p>🧊 저모음은 보스 행동을 잠시 멈추고, 🐌 후설모음은 보스의 이동 속도를 늦추며, ❄ 전설모음은 보스를 완전히 정지시킵니다.</p><p>보스 등장과 동시에 <strong>공격·지원 식물의 약 60%</strong>가 파괴됩니다. 소리꽃은 파괴되지 않습니다. 남은 소리씨앗으로 빠르게 진형을 다시 구축하세요.</p><p>🪏 <strong>RAID에서는 식물을 제거하면 구매 비용의 70%를 환불</strong>합니다. 보스 단어에 맞춰 진형을 적극적으로 재배치하세요.</p><p>⚡ <strong>RAID 유음 공명:</strong> 유음 식물들이 보스를 총 3번 공격하면 공명 추가타가 발생합니다. 연구개음·파찰음·비음도 보스전에서는 각자의 특성이 단일 대상에 맞게 강화됩니다.</p><p>보스는 약 <strong>6초마다</strong> 한 레인의 가장 앞쪽 식물에 충격파를 사용합니다.</p><p>보스는 <strong>세로 5레인 × 가로 1칸 크기</strong>로 천천히 전진합니다. 현재 보스와 맞닿은 한 열의 식물만 공격하며, 그 열을 뚫으면 다시 전진합니다. <strong>왼쪽 끝에 도달하면 즉시 패배합니다.</strong></p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="RAID 시작";unlockNextButton.dataset.action="start-raid";delete unlockNextButton.dataset.wave;
   unlockOverlay.classList.remove("hidden");
 }
 
@@ -4048,7 +4868,7 @@ function calculateFinalScoreBreakdown(){
     Math.max(
       1,
       Math.floor(
-        (Date.now()-gameStartTime)/1000
+        (nowGame()-gameStartTime)/1000
       )
     );
 
@@ -4176,13 +4996,28 @@ function applyFinalClearScore(){
 function finishRaid(){
   if(!raidMode||!raidBoss)return;
 
-  if(raidBoss.entranceTimer)clearTimeout(raidBoss.entranceTimer);
-  if(raidBoss.entranceLandTimer)clearTimeout(raidBoss.entranceLandTimer);
+  forceUnpauseGame();
+
+  if(raidBoss.entranceTimer){
+    if(typeof raidBoss.entranceTimer==="object" && typeof raidBoss.entranceTimer.clear==="function"){
+      raidBoss.entranceTimer.clear();
+    }else{
+      clearTimeout(raidBoss.entranceTimer);
+    }
+  }
+  if(raidBoss.entranceLandTimer){
+    if(typeof raidBoss.entranceLandTimer==="object" && typeof raidBoss.entranceLandTimer.clear==="function"){
+      raidBoss.entranceLandTimer.clear();
+    }else{
+      clearTimeout(raidBoss.entranceLandTimer);
+    }
+  }
 
   raidBoss.alive=false;
   raidMode=false;
   waveInProgress=false;
   stopBossBgm();
+  updatePauseUI();
 
   if(raidBoss.body&&raidBoss.body.parentElement)raidBoss.body.remove();
   detachRaidBossHud();
@@ -4198,52 +5033,96 @@ function finishRaid(){
   finishGame();
 }
 
-function gameLoop(){
-  const now=Date.now();
+function pruneDeadZombies(){
+  if(!zombies.length)return;
+  let hasDead=false;
+  for(let i=0;i<zombies.length;i++){
+    if(!zombies[i].alive){hasDead=true;break;}
+  }
+  if(hasDead){
+    perfCountZombiesFilter();
+    zombies=zombies.filter(z=>z.alive);
+  }
+}
+
+function gameLoop(currentTime){
+  if(isPaused){
+    for(let i=0;i<activeProjectiles.length;i++){
+      activeProjectiles[i].lastFrameTime=null;
+    }
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  const frameTime=currentTime??perfNow();
+  const _frameT0=PERF_DIAG.enabled?perfNow():0;
+  let _supportMs=0,_zombieMs=0,_labelMs=0,_statusMs=0,_targetMs=0,_otherMs=0;
+  const now=nowGame();
   if(!gameOver){
-    const cells=board.querySelectorAll(".cell");
-    cells.forEach((cell,index)=>{const type=cell.dataset.plantType,plant=cell.querySelector(".plant");if(!type||!plant)return;const data=PLANT_DB[type];if(data.attackType!=="support"&&data.attackType!=="control"){plant.classList.remove("support-active");return;}let active=false;if(raidMode)active=!!(raidBoss&&raidBoss.alive&&raidBoss.features.includes(data.feature));else if(type==="전설모음"||type==="후설모음")active=zombies.some(z=>z.alive&&z.x<BOARD_WIDTH&&z.features.includes(data.feature));else active=isSupportActive(index,data.feature);plant.classList.toggle("support-active",active);});
-    updateSupportVisuals(cells);
-    cells.forEach((cell, index) => {
-      if(cell.dataset.plantType !== "에너지식물") return;
+    beginFrameCombatCache();
+    const cells=boardCells;
 
-      const data = PLANT_DB["에너지식물"];
-      const last = Number(cell.dataset.lastEnergyTime);
-
-      if(now - last < data.special.interval * 1000) return;
-
-      const beforeEnergy = energy;
-      changeEnergy(data.special.amount);
-      const gainedEnergy = energy - beforeEnergy;
-
-      cell.dataset.lastEnergyTime = now;
-
-      if(gainedEnergy <= 0) return;
-
-      // 소리꽃 실제 생산 순간에만 SFX (자연 회복 setInterval과는 분리)
-      playSfx("energy_gain");
-
-      const plant = cell.querySelector(".plant");
-
-      if(plant){
-        plant.classList.remove("energy-producing");
-        void plant.offsetWidth;
-        plant.classList.add("energy-producing");
-
-        setTimeout(() => {
-          if(plant && plant.isConnected){
-            plant.classList.remove("energy-producing");
-          }
-        }, 700);
-
-        createSoundSeedGainVfx(plant);
+    {
+      const _t0=PERF_DIAG.enabled?perfNow():0;
+      if(!PERF_DIAG.disableSupportVisual&&now-lastSupportVisualAt>=SUPPORT_VISUAL_INTERVAL_MS){
+        lastSupportVisualAt=now;
+        updateSupportPlantActiveVisuals(cells);
+        updateSupportVisuals(cells);
       }
-    });
-    processHealing(cells,now);
-    if(raidMode){processRaidControlPlants(cells,now);processRaidDot(now);if(raidBoss&&raidBoss.alive){processRaidWordChangeWarning(now);if(now>=raidBoss.nextWordChangeAt)changeRaidBossWord(now);updateRaidBossMovement(now,cells);if(raidMode&&raidBoss&&raidBoss.alive){performRaidBossAttack(cells,now);updateRaidBossUI(now);}}}
-    else{processFreezePlants(cells,now);processGlobalSlowPlants(cells,now);processGlobalFreezePlants(cells,now);processDots(now);}
+      if(PERF_DIAG.enabled)_supportMs+=perfNow()-_t0;
+    }
+
+    {
+      const _t0=PERF_DIAG.enabled?perfNow():0;
+      cells.forEach((cell, index) => {
+        if(cell.dataset.plantType !== "에너지식물") return;
+
+        const data = PLANT_DB["에너지식물"];
+        const last = Number(cell.dataset.lastEnergyTime);
+
+        if(now - last < data.special.interval * 1000) return;
+
+        const beforeEnergy = energy;
+        changeEnergy(data.special.amount);
+        const gainedEnergy = energy - beforeEnergy;
+
+        cell.dataset.lastEnergyTime = now;
+
+        if(gainedEnergy <= 0) return;
+
+        // 소리꽃 실제 생산 순간에만 SFX (자연 회복 setInterval과는 분리)
+        playSfx("energy_gain");
+
+        const plant = cell.querySelector(".plant");
+
+        if(plant){
+          plant.classList.remove("energy-producing");
+          void plant.offsetWidth;
+          plant.classList.add("energy-producing");
+
+          setTimeout(() => {
+            if(plant && plant.isConnected){
+              plant.classList.remove("energy-producing");
+            }
+          }, 700);
+
+          createSoundSeedGainVfx(plant);
+        }
+      });
+      if(PERF_DIAG.enabled)_otherMs+=perfNow()-_t0;
+    }
+
+    {
+      const _t0=PERF_DIAG.enabled?perfNow():0;
+      processHealing(cells,now);
+      if(raidMode){processRaidControlPlants(cells,now);processRaidDot(now);if(raidBoss&&raidBoss.alive){processRaidWordChangeWarning(now);if(now>=raidBoss.nextWordChangeAt)changeRaidBossWord(now);updateRaidBossMovement(now,cells);if(raidMode&&raidBoss&&raidBoss.alive){performRaidBossAttack(cells,now);updateRaidBossUI(now);}}}
+      else{processFreezePlants(cells,now);processGlobalSlowPlants(cells,now);processGlobalFreezePlants(cells,now);processDots(now);}
+      if(PERF_DIAG.enabled)_statusMs+=perfNow()-_t0;
+    }
 
     if(!raidMode){
+      const _tZ0=PERF_DIAG.enabled?perfNow():0;
+      let _labelCost=0;
       zombies.forEach(zombie=>{
         if(!zombie.alive)return;let delta=(now-zombie.lastUpdateTime)/1000;delta=Math.min(delta,0.1);zombie.lastUpdateTime=now;
         zombie.element.classList.toggle("frozen",zombie.frozenUntil>now);
@@ -4256,7 +5135,11 @@ function gameLoop(){
           // 공격 중인 좀비 그림만 오른쪽으로 조금 물려서 식물과 겹치지 않게 한다.
           zombie.element.classList.add("attacking-plant");
           updateZombiePosition(zombie,ZOMBIE_ATTACK_VISUAL_OFFSET);
-          updateZombieApproachAppearance(zombie);
+          {
+            const _tl=PERF_DIAG.enabled?perfNow():0;
+            updateZombieApproachAppearance(zombie);
+            if(PERF_DIAG.enabled)_labelCost+=perfNow()-_tl;
+          }
 
           if(now-zombie.lastBiteTime>=ZOMBIE_BITE_INTERVAL){
             zombie.lastBiteTime=now;
@@ -4329,17 +5212,23 @@ function gameLoop(){
           }
 
           updateZombiePosition(zombie);
-          updateZombieApproachAppearance(zombie);
+          {
+            const _tl=PERF_DIAG.enabled?perfNow():0;
+            updateZombieApproachAppearance(zombie);
+            if(PERF_DIAG.enabled)_labelCost+=perfNow()-_tl;
+          }
 
           if(zombie.x<-ZOMBIE_WIDTH){
             recordMissedZombie(zombie);
             zombie.alive=false;
+            invalidateFrameTargetCaches();
             if(zombie.element.parentElement)zombie.element.remove();
             resolvedZombies++;
 
             if(!tutorialMode){
               life--;
               lifeDisplay.textContent=life;
+              showLifeLostEffect();
               if(life<=0){
                 endGame();
                 return;
@@ -4350,18 +5239,64 @@ function gameLoop(){
           }
         }
       });
-      updateZombieLabelOffsets();
+      {
+        const _tl=PERF_DIAG.enabled?perfNow():0;
+        updateZombieLabelOffsets();
+        if(PERF_DIAG.enabled)_labelCost+=perfNow()-_tl;
+      }
+      // 이동 후 좌표가 바뀌었으므로 공격/support 판정 캐시를 갱신 가능하게 비운다.
+      invalidateFrameTargetCaches();
+      if(PERF_DIAG.enabled){
+        const _zombieTotal=perfNow()-_tZ0;
+        _zombieMs+=Math.max(0,_zombieTotal-_labelCost);
+        _labelMs+=_labelCost;
+      }
     }
 
-    cells.forEach((cell,index)=>{
-      const type=cell.dataset.plantType;if(!type)return;const data=PLANT_DB[type];if(!data)return;
-      if(["generator","support","control","tank"].includes(data.attackType))return;
-      const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS,speedMultiplier=getAttackSpeedMultiplier(index,cells),interval=data.attackInterval*1000*speedMultiplier,lastAttack=Number(cell.dataset.lastAttack);
-      if(now-lastAttack<interval)return;
-      if(raidMode){if(!raidBoss||!raidBoss.alive||!raidBoss.features.includes(data.feature))return;playPlantAttackSfx();cell.dataset.lastAttack=now;performRaidPlantAttack(row,column,data);return;}
-      const targets=getCompatibleTargets(row,data.feature,column);if(!targets.length)return;playPlantAttackSfx();cell.dataset.lastAttack=now;
-      switch(data.attackType){case "burst":performBurstAttack(row,column,targets[0],data);break;case "chain":performChainAttack(row,column,targets,data);break;case "dot":performDotAttack(row,column,targets[0],data);break;case "pierce":performPierceAttack(row,column,data);break;case "deathBurst":performDeathBurstAttack(row,column,targets[0],data);break;case "volley":performVolleyAttack(row,column,data);break;case "sniper":performSniperAttack(row,column,targets,data);break;default:performNormalAttack(row,column,targets[0],data);}
-    });
+    if(!PERF_DIAG.disablePlantAttack){
+      const _t0=PERF_DIAG.enabled?perfNow():0;
+      cells.forEach((cell,index)=>{
+        const type=cell.dataset.plantType;if(!type)return;const data=PLANT_DB[type];if(!data)return;
+        if(["generator","support","control","tank"].includes(data.attackType))return;
+
+        const lastAttack=Number(cell.dataset.lastAttack);
+        const baseIntervalMs=data.attackInterval*1000;
+        // 고모음 최대 가속(0.75)을 가정해도 아직 쿨이면 타겟/공속 탐색 자체를 건너뜀
+        if(now-lastAttack<baseIntervalMs*FASTEST_ATTACK_SPEED_MULT)return;
+
+        const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;
+        const speedMultiplier=getAttackSpeedMultiplier(index,cells);
+        const interval=baseIntervalMs*speedMultiplier;
+        if(now-lastAttack<interval)return;
+
+        if(raidMode){if(!raidBoss||!raidBoss.alive||!raidBoss.features.includes(data.feature))return;playPlantAttackSfx();cell.dataset.lastAttack=now;performRaidPlantAttack(row,column,data);return;}
+        const targets=getCompatibleTargets(row,data.feature,column);if(!targets.length)return;playPlantAttackSfx();cell.dataset.lastAttack=now;
+        switch(data.attackType){case "burst":performBurstAttack(row,column,targets[0],data);break;case "chain":performChainAttack(row,column,targets,data);break;case "dot":performDotAttack(row,column,targets[0],data);break;case "pierce":performPierceAttack(row,column,data);break;case "deathBurst":performDeathBurstAttack(row,column,targets[0],data);break;case "volley":performVolleyAttack(row,column,data);break;case "sniper":performSniperAttack(row,column,targets,data);break;default:performNormalAttack(row,column,targets[0],data);}
+      });
+      if(PERF_DIAG.enabled)_targetMs+=perfNow()-_t0;
+    }
+
+    {
+      const _t0=PERF_DIAG.enabled?perfNow():0;
+      pruneDeadZombies();
+      frameCombat=null;
+      if(PERF_DIAG.enabled)_otherMs+=perfNow()-_t0;
+    }
+  }
+
+  // 일반 Wave 투사체: 메인 rAF에서 일괄 갱신 (개당 rAF 없음)
+  updateActiveProjectiles(frameTime);
+
+  if(PERF_DIAG.enabled){
+    const frameMs=perfNow()-_frameT0;
+    PERF_DIAG.tSupport+=_supportMs;
+    PERF_DIAG.tZombie+=_zombieMs;
+    PERF_DIAG.tLabel+=_labelMs;
+    PERF_DIAG.tStatus+=_statusMs;
+    PERF_DIAG.tTarget+=_targetMs;
+    PERF_DIAG.tOther+=_otherMs;
+    // projectile ms는 updateActiveProjectiles에서 PERF_DIAG.tProjectile에 누적
+    perfDiagTickFrame(frameMs,PERF_DIAG.countOnBoard());
   }
   requestAnimationFrame(gameLoop);
 }
@@ -4371,6 +5306,8 @@ function checkRoundEnd(){
   if(resolvedZombies<waveZombieCount)return;
 
   waveInProgress=false;
+  forceUnpauseGame();
+  updatePauseUI();
 
   if(tutorialMode){
     finishTutorial();
@@ -4401,14 +5338,36 @@ function buildGameFeedbackHTML(cleared=false){
 function startTutorial(){
   practiceMode=false;if(practiceToolbar)practiceToolbar.classList.add("hidden");if(practicePanel)practicePanel.classList.add("hidden");
   clearTutorialGuide();
+  forceUnpauseGame();
   startOverlay.classList.add("hidden");tutorialMode=true;raidMode=false;gameOver=false;waveInProgress=true;tutorialSpawnIndex=0;tutorialEnergyBonusGiven=false;resolvedZombies=0;waveZombieCount=TUTORIAL_CONFIG.zombieCount;energy=130;life=5;score=0;energyDisplay.textContent=energy;lifeDisplay.textContent=life;scoreDisplay.textContent=score;waveDisplay.textContent="T";unlockedPlants=new Set(["양순음","치조음"]);updatePlantButtons();createBoard();tutorialGuide.classList.remove("hidden");tutorialGuideText.innerHTML=`튜토리얼을 시작합니다.<br><br>식물 버튼을 선택한 뒤 게임판의 원하는 칸을 클릭하면 식물을 배치할 수 있습니다.<br><br>잠시 후 첫 번째 단어가 등장합니다.`;
-  setTimeout(()=>{if(!tutorialMode)return;spawnTutorialZombie();currentSpawnTimer=setInterval(()=>{if(!tutorialMode){clearInterval(currentSpawnTimer);currentSpawnTimer=null;return;}if(tutorialSpawnIndex>=TUTORIAL_CONFIG.zombieCount){clearInterval(currentSpawnTimer);currentSpawnTimer=null;return;}spawnTutorialZombie();},TUTORIAL_CONFIG.spawnInterval);},3000);
+  setPausableTimeout(()=>{
+    if(!tutorialMode)return;
+    spawnTutorialZombie();
+    currentSpawnTimer=setInterval(()=>{
+      if(isPaused)return;
+      if(!tutorialMode){
+        clearInterval(currentSpawnTimer);
+        currentSpawnTimer=null;
+        return;
+      }
+      if(tutorialSpawnIndex>=TUTORIAL_CONFIG.zombieCount){
+        clearInterval(currentSpawnTimer);
+        currentSpawnTimer=null;
+        return;
+      }
+      spawnTutorialZombie();
+    },TUTORIAL_CONFIG.spawnInterval);
+  },3000);
+  updatePauseUI();
 }
 function finishTutorial(){
+  forceUnpauseGame();
   clearTutorialGuide();
   if(currentSpawnTimer){clearInterval(currentSpawnTimer);currentSpawnTimer=null;}tutorialGuide.classList.add("hidden");unlockTitle.textContent="🎓 튜토리얼 완료!";unlockContent.innerHTML=`<p>기본적인 방어 방법을 익혔습니다.</p><p>본게임에서는 단어에 포함된 음운의 특징을 직접 판단해 식물을 선택해야 합니다.</p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="Wave 1 시작";unlockNextButton.dataset.action="start-main";delete unlockNextButton.dataset.wave;unlockOverlay.classList.remove("hidden");
+  updatePauseUI();
 }
-function resetForMainGame(){gameStartTime=Date.now();finalScoreCalculated=false;
+function resetForMainGame(){gameStartTime=nowGame();finalScoreCalculated=false;
+  forceUnpauseGame();
   practiceMode=false;
   clearTutorialGuide();
   if(practiceToolbar) practiceToolbar.classList.add("hidden");
@@ -4504,13 +5463,14 @@ function ensurePracticeModeUI(){
 
   practiceToolbar.querySelector('[data-practice-action="select"]').addEventListener("click",()=>{
     playSfx("click_ui");
+    if(isPaused) return;
     stopPracticeCombat();
     practicePanel.classList.remove("hidden");
   });
 
   practiceToolbar.querySelector('[data-practice-action="energy"]').addEventListener("click",()=>{
     playSfx("click_ui");
-    if(!practiceMode)return;
+    if(!practiceMode||isPaused)return;
     energy=MAX_ENERGY;
     energyDisplay.textContent=energy;
     updatePlantButtons();
@@ -4518,13 +5478,14 @@ function ensurePracticeModeUI(){
 
   practiceToolbar.querySelector('[data-practice-action="clear"]').addEventListener("click",()=>{
     playSfx("click_ui");
-    if(!practiceMode)return;
+    if(!practiceMode||isPaused)return;
     clearPracticeEnemies();
   });
 
   practiceToolbar.querySelectorAll("[data-practice-enemy]").forEach(button=>{
     button.addEventListener("click",()=>{
       playSfx("click_ui");
+      if(isPaused)return;
       spawnPracticeEnemy(button.dataset.practiceEnemy);
     });
   });
@@ -4587,7 +5548,7 @@ function startPracticeRaid(){
 }
 
 function spawnPracticeEnemy(enemyType){
-  if(!practiceMode || raidMode || gameOver)return;
+  if(!practiceMode || raidMode || gameOver || isPaused)return;
 
   const config=WAVE_CONFIG[currentWave] || WAVE_CONFIG[9];
   const wordData=getNextWordData();
@@ -4616,6 +5577,7 @@ function clearPracticeEnemies(){
   });
 
   zombies=[];
+  clearActiveProjectiles();
   waveZombieCount=0;
   resolvedZombies=0;
   waveInProgress=!!(raidMode && raidBoss && raidBoss.alive);
@@ -4634,6 +5596,7 @@ function stopPracticeCombat(){
     if(zombie.element && zombie.element.parentElement) zombie.element.remove();
   });
   zombies=[];
+  clearActiveProjectiles();
 
   if(raidBoss){
     raidBoss.alive=false;
@@ -4653,8 +5616,10 @@ function stopPracticeCombat(){
 function finishPracticeSession(message="테스트 완료"){
   if(!practiceMode)return;
 
+  forceUnpauseGame();
   stopPracticeCombat();
   gameOver=false;
+  updatePauseUI();
 
   if(practiceToolbar) practiceToolbar.classList.remove("hidden");
   if(practicePanel){
@@ -4724,7 +5689,8 @@ function buildRaidTestFormation(){
   updatePlantButtons();
 }
 
-function startRaidTest(){gameStartTime=Date.now();finalScoreCalculated=false;
+function startRaidTest(){gameStartTime=nowGame();finalScoreCalculated=false;
+  forceUnpauseGame();
   practiceMode=false;if(practiceToolbar)practiceToolbar.classList.add("hidden");if(practicePanel)practicePanel.classList.add("hidden");
   startOverlay.classList.add("hidden");
   unlockOverlay.classList.add("hidden");
@@ -4871,6 +5837,8 @@ if(!window.__phonemeDevTestCommandBound){
 }
 
 function showNextWavePopup(nextWave){
+  forceUnpauseGame();
+  updatePauseUI();
   const newPlants=WAVE_UNLOCKS[nextWave]||[];newPlants.forEach(type=>unlockedPlants.add(type));updatePlantButtons();unlockNextButton.style.display="inline-block";unlockNextButton.dataset.action="next-wave";let plantHTML="";
   if(newPlants.length)plantHTML=newPlants.map(buildUnlockPlantHTML).join("");
   if(nextWave===7){unlockTitle.textContent="⚠ 새로운 적 등장!";unlockContent.innerHTML=`${plantHTML}<hr><h3>⚠ 특수 단어 몬스터 등장</h3><p>이제부터 일부 적은 특별한 능력을 가지고 등장합니다.</p><p>🏃 <strong>돌진형</strong><br>빠른 속도로 방어선에 접근합니다.</p><p>💢 <strong>파괴형</strong><br>느리지만 매우 단단하고 식물에게 큰 피해를 줍니다.</p><p>🛡 <strong>불굴형</strong><br>높은 체력을 가지고 있으며 둔화와 빙결에서 매우 빠르게 회복합니다.</p><p>💣 <strong>폭발형</strong><br>쓰러질 때 주변 식물에 강력한 폭발 피해를 줍니다.<br><strong>가능한 한 방어선에서 멀리 처치하세요.</strong></p><p>이제부터는 단어의 음운뿐 아니라 <strong>적 종류와 처치 위치</strong>도 중요합니다.</p>`;}
@@ -4892,7 +5860,8 @@ function startWave(){
   ){
     requestBattleBgm({restart:false});
   }
-  const config=WAVE_CONFIG[currentWave];if(!config)return;waveInProgress=true;resolvedZombies=0;waveZombieCount=config.zombieCount;waveWordBag=[];lastSpawnedWordId=null;buildEnemyTypeBag();waveDisplay.textContent=currentWave===9?"FINAL":currentWave;let spawned=0;spawnZombie();spawned++;currentSpawnTimer=setInterval(()=>{if(gameOver||spawned>=waveZombieCount){clearInterval(currentSpawnTimer);currentSpawnTimer=null;return;}spawnZombie();spawned++;},config.spawnInterval);
+  const config=WAVE_CONFIG[currentWave];if(!config)return;waveInProgress=true;resolvedZombies=0;waveZombieCount=config.zombieCount;waveWordBag=[];lastSpawnedWordId=null;buildEnemyTypeBag();waveDisplay.textContent=currentWave===9?"FINAL":currentWave;let spawned=0;spawnZombie();spawned++;currentSpawnTimer=setInterval(()=>{if(isPaused)return;if(gameOver||spawned>=waveZombieCount){clearInterval(currentSpawnTimer);currentSpawnTimer=null;return;}spawnZombie();spawned++;},config.spawnInterval);
+  updatePauseUI();
 }
 function removeEndIllustrationOverlay(){
   const existing=document.getElementById("end-illustration-overlay");
@@ -4900,6 +5869,7 @@ function removeEndIllustrationOverlay(){
 }
 
 function showClearIllustration(){
+  forceUnpauseGame();
   removeEndIllustrationOverlay();
 
   const overlay=document.createElement("div");
@@ -4938,6 +5908,7 @@ function showClearIllustration(){
 }
 
 function showGameOverIllustration(){
+  forceUnpauseGame();
   removeEndIllustrationOverlay();
 
   const overlay=document.createElement("div");
@@ -4982,16 +5953,20 @@ function endGame(){
     return;
   }
 
+  forceUnpauseGame();
   gameOver=true;waveInProgress=false;raidMode=false;stopBattleBgm();life=0;lifeDisplay.textContent=life;if(currentSpawnTimer){clearInterval(currentSpawnTimer);currentSpawnTimer=null;}restartButton.style.display="inline-block";plantButtons.forEach(button=>button.disabled=true);removeButton.disabled=true;unlockTitle.textContent="💀 GAME OVER";unlockContent.innerHTML=`<p>방어선이 무너졌습니다.</p>${buildGameFeedbackHTML(false)}`;unlockNextButton.style.display="none";
+  updatePauseUI();
   showGameOverIllustration();
 }
 function finishGame(){
   if(gameOver)return;
 
+  forceUnpauseGame();
   gameOver=true;
   waveInProgress=false;
   raidMode=false;
   stopBattleBgm();
+  updatePauseUI();
 
   // 기존 최종 클리어 보너스
   score+=1000;
@@ -5041,7 +6016,7 @@ function finishGame(){
 }
 
 
-setInterval(()=>{if(!gameOver&&waveInProgress&&!tutorialMode)changeEnergy(10);},8000);
+setInterval(()=>{if(isPaused||gameOver||!waveInProgress||tutorialMode)return;changeEnergy(10);},8000);
 restartButton.addEventListener("click",()=>{playSfx("click_ui");location.reload();});
 
 
@@ -5532,4 +6507,5 @@ preloadSfx();
 preloadBattleBgm();
 initBgmAutoplayUnlock();
 injectVisualAssetStyles();
+initPauseControls();
 energyDisplay.textContent=energy;waveDisplay.textContent=currentWave;lifeDisplay.textContent=life;scoreDisplay.textContent=score;updatePlantButtons();setupBattleSideLayout();createBoard();initGameFitScale();requestAnimationFrame(gameLoop);

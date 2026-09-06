@@ -24,7 +24,8 @@ h1 {
   z-index: 40;
 }
 
-body:has(#start-overlay:not(.hidden)) .page-brand-logo {
+body:has(#start-overlay:not(.hidden)) .page-brand-logo,
+body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   visibility: hidden;
   opacity: 0;
 }
@@ -5082,6 +5083,138 @@ body > h1 {
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28));
 }
 
+/* 우측 상단: 일시정지 버튼 + 미니 로고 */
+#game-scale-root .page-brand-cluster {
+  position: absolute !important;
+  top: 10px !important;
+  right: 16px !important;
+  left: auto !important;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+#game-scale-root .page-brand-cluster > * {
+  pointer-events: auto;
+}
+
+#game-scale-root .page-brand-logo {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  width: 196px;
+  display: block;
+}
+
+.pause-button {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  user-select: none;
+  line-height: 0;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.pause-button-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.pause-button:hover {
+  filter: brightness(1.06);
+  transform: scale(1.05);
+}
+
+.pause-button:active {
+  filter: brightness(0.98);
+  transform: scale(0.97);
+}
+
+.pause-button.hidden,
+.pause-overlay.hidden {
+  display: none !important;
+}
+
+.pause-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 10, 18, 0.28);
+  pointer-events: auto;
+}
+
+.pause-overlay-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 28px 36px 30px;
+  border: 2px solid rgba(196, 158, 82, 0.55);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(28, 42, 28, 0.82) 0%, rgba(18, 28, 20, 0.88) 100%);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.pause-overlay-label {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #fff6d8;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 0 10px rgba(255, 210, 90, 0.25);
+  pointer-events: none;
+  user-select: none;
+}
+
+.pause-resume-button {
+  min-width: 240px;
+  min-height: 64px;
+  margin: 0;
+  padding: 14px 28px;
+  border: 2px solid #c49a3c;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f0d070 0%, #d4a53a 48%, #b8862a 100%);
+  box-shadow:
+    0 4px 0 #7a5a18,
+    0 8px 18px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 230, 0.45);
+  color: #2a1c08;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.pause-resume-button:hover {
+  filter: brightness(1.06);
+  transform: scale(1.05);
+}
+
 .start-brand-logo {
   width: 100%;
   max-width: 100%;
@@ -5233,6 +5366,52 @@ body > h1 {
   width: 68%;
   height: 30%;
   transform: translate(-50%, calc(-50% - 1px));
+}
+
+.status-bar .hud-life .hud-value.life-lost-pop {
+  animation: lifeHudValuePop 0.28s ease-out;
+  color: #ff6a5a !important;
+}
+
+.status-bar .hud-slot.hud-life.life-lost-shake {
+  animation: lifeHudShake 0.26s ease-in-out;
+}
+
+/* 생명 감소 화면 피격 오버레이 */
+.life-lost-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+  background: rgba(170, 24, 36, 0.22);
+  opacity: 0;
+}
+
+.life-lost-overlay.is-active {
+  animation: lifeLostScreenFlash 0.22s ease-out forwards;
+}
+
+@keyframes lifeLostScreenFlash {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes lifeHudShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+
+@keyframes lifeHudValuePop {
+  0% {
+    transform: translate(-50%, calc(-50% - 1px)) scale(1.25);
+  }
+  100% {
+    transform: translate(-50%, calc(-50% - 1px)) scale(1);
+  }
 }
 
 .status-bar .hud-score .hud-value {
@@ -10225,14 +10404,6 @@ body {
   top: auto !important;
   max-height: none !important;
   overflow: visible !important;
-}
-
-#game-scale-root .page-brand-logo {
-  position: absolute !important;
-  top: 10px !important;
-  right: 16px !important;
-  left: auto !important;
-  z-index: 40;
 }
 
 #game-scale-root .status-bar {
