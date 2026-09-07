@@ -990,12 +990,18 @@ function clearCanvasDeadZombieVisuals(){
 }
 
 function spawnCanvasHitEffect(fx){
+  // 도형형 피격 VFX(spark / proj shape) — 객체 생성 자체를 스킵 (soft flash·recoil은 별도 경로)
+  const kind=fx&&fx.kind?fx.kind:"proj";
+  if(kind==="spark"||kind==="proj") return;
+  // 이모지 text burst도 Canvas 미생성
+  if(kind==="text"&&isCombatEmojiVfxText(fx.text)) return;
+
   canvasHitEffects.push({
     x:fx.x||0,
     y:fx.y||0,
     x2:fx.x2,
     y2:fx.y2,
-    kind:fx.kind||"proj",
+    kind,
     plantType:fx.plantType||null,
     startTime:nowGame(),
     duration:Math.max(16,fx.duration||300),
@@ -2914,7 +2920,22 @@ removeButton.addEventListener("click",function(){
   setPlantInfoPanelActive(true);
 });
 
+/** 전투 중 이모지 기반 floating VFX 판별 (Extended Pictographic) */
+function isCombatEmojiVfxText(text){
+  if(text==null||text==="")return false;
+  const s=String(text);
+  try{
+    return /\p{Extended_Pictographic}/u.test(s);
+  }catch(_e){
+    return /[\u2600-\u27BF\uFE0F]|[\uD83C-\uDBFF][\uDC00-\uDFFF]/.test(s);
+  }
+}
+
 function createEffect(text,x,y,className,duration=500){
+  // 이모지 VFX: DOM·setTimeout 생성 스킵 (비이모지 안내 문구는 유지)
+  if(isCombatEmojiVfxText(text)) return;
+  if(!board) return;
+
   const effect=document.createElement("div");
   effect.classList.add("attack-effect");
   if(className){
@@ -2986,39 +3007,16 @@ const PROJECTILE_HIT_VFX_KIND={
 };
 
 function createProjectileHitVfx(plantType,x,y,options={}){
-  // 일반 Wave Canvas 피격 VFX — FINAL BOSS(raid)는 기존 DOM 유지
-  if(useCanvasHitVfx()&&!raidMode){
-    spawnCanvasHitEffect({
-      kind:"proj",
-      plantType,
-      x,y,
-      duration:options.duration??420,
-      isFinal:!!options.isFinal,
-      isChain:!!options.isChain,
-      shotIndex:options.shotIndex
-    });
-    return;
-  }
-
-  const effect=document.createElement("div");
-  const typeClass=PROJECTILE_HIT_VFX_CLASS[plantType]||"proj-hit-default";
-  effect.classList.add("projectile-hit-vfx",typeClass);
-  if(options.isFinal) effect.classList.add("proj-hit-final");
-  if(options.isChain) effect.classList.add("proj-hit-chain");
-  if(options.shotIndex!==undefined){
-    effect.dataset.shotIndex=String(options.shotIndex);
-  }
-  effect.style.left=x+"px";
-  effect.style.top=y+"px";
-  board.appendChild(effect);
-  const duration=options.duration??420;
-  setTimeout(()=>{
-    if(effect.parentElement) effect.remove();
-  },duration);
+  // 도형형 projectile hit VFX 비활성 (Canvas shape / DOM) — 생성 스킵
+  // 움찔·soft flash는 triggerZombieHitVisual / triggerRaidBossHitVisual 경로 유지
+  return;
 }
 
 /** 비음 splash 등 피격 연계 텍스트 버스트 (status freeze/slow DOM createEffect와 분리) */
 function createWaveHitTextEffect(text,x,y,className,duration=500){
+  // 이모지 버스트(💫/✹ 등) 미생성
+  if(isCombatEmojiVfxText(text)) return;
+
   if(useCanvasHitVfx()&&!raidMode){
     spawnCanvasHitEffect({
       kind:"text",
@@ -3340,7 +3338,10 @@ function createPierceTrail(row,column,targets){
   trail.style.left=startX+"px"; trail.style.top=(row*CELL_SIZE+45)+"px"; trail.style.width=Math.max(30,endX-startX)+"px";
   board.appendChild(trail); setTimeout(()=>trail.remove(),400);
 }
-function createGlobalFreezeScreen(){const e=document.createElement("div");e.classList.add("global-freeze-screen");e.textContent="❄ 전설모음 발동! ❄";board.appendChild(e);setTimeout(()=>e.remove(),950);}
+function createGlobalFreezeScreen(){
+  // ❄ 전설모음 전역 이모지 스크린 DOM 비활성 — freeze 판정은 호출부 유지
+  return;
+}
 
 /**
  * 후설모음 전역 cast VFX — Canvas 파동 1개 + 발동 텍스트 (DOM·좀비별 visual 없음).
@@ -4398,29 +4399,9 @@ function updatePlantHPBar(cell){
 }
 
 function createHitImpactParticle(zombie,heavy=false){
-  if(!zombie||!board) return;
-  const pos=getZombieHitVfxPosition(zombie);
-  if(useCanvasHitVfx()&&!raidMode){
-    spawnCanvasHitEffect({
-      kind:"spark",
-      x:pos.x,
-      y:pos.y,
-      heavy,
-      seed:Math.random()*Math.PI*2,
-      duration:heavy?150:125
-    });
-    return;
-  }
-  const spark=document.createElement("div");
-  spark.className=heavy
-    ? "hit-impact-spark hit-impact-heavy"
-    : "hit-impact-spark";
-  spark.style.left=pos.x+"px";
-  spark.style.top=pos.y+"px";
-  board.appendChild(spark);
-  setTimeout(()=>{
-    if(spark.parentElement) spark.remove();
-  },heavy?150:125);
+  // 도형형 impact/spark 파티클 비활성 — Canvas spark·DOM hit-impact-spark 미생성
+  // soft flash + recoil은 triggerZombieHitVisual 유지
+  return;
 }
 
 function triggerZombieHitVisual(zombie,extraClass=""){
@@ -5846,35 +5827,9 @@ function createRaidDamageNumber(damage,extraClass=""){
   return;
 }
 function createRaidBossHitImpact(heavy=false){
-  if(!raidMode||!raidBoss||!raidBoss.alive||!board)return;
-
-  const now=nowGame();
-  const activeCount=board.querySelectorAll(".raid-boss-hit-impact").length;
-
-  // 동시 파티클 과다 겹침 방지
-  if(activeCount>=(heavy?4:3))return;
-  if(!heavy&&now<(raidBoss.hitImpactCooldownUntil||0))return;
-  if(heavy&&now<(raidBoss.hitImpactHeavyCooldownUntil||0))return;
-
-  raidBoss.hitImpactCooldownUntil=now+(heavy?45:70);
-  if(heavy) raidBoss.hitImpactHeavyCooldownUntil=now+55;
-
-  const spark=document.createElement("div");
-  spark.className=heavy
-    ? "raid-boss-hit-impact raid-boss-hit-impact-heavy"
-    : "raid-boss-hit-impact";
-
-  // 보스 본체 left는 그대로 두고, 피격 지점만 보드 좌표로 표시
-  const jitterX=(Math.random()*12)-6;
-  const row=Math.floor(Math.random()*BOARD_ROWS);
-  const pos=getRaidHitVfxPosition(row);
-  spark.style.left=(pos.x+jitterX)+"px";
-  spark.style.top=(pos.y+(Math.random()*10)-5)+"px";
-
-  board.appendChild(spark);
-  setTimeout(()=>{
-    if(spark.parentElement)spark.remove();
-  },heavy?240:180);
+  // BOSS 피격 impact/spark DOM 비활성 — 생성·query·setTimeout 전부 스킵.
+  // 피드백은 triggerRaidBossHitVisual(움찔)만 유지.
+  return;
 }
 
 function triggerRaidBossHitVisual(extraClass=""){
@@ -6563,19 +6518,7 @@ function destroyPlantsForRaidOpening(){
   const removeCount=Math.min(desired,maxRemovable);
 
   shuffled.slice(0,removeCount).forEach(cell=>{
-    const index=Number(cell.dataset.index);
-    const row=Math.floor(index/BOARD_COLUMNS);
-    const column=index%BOARD_COLUMNS;
-
-    createEffect(
-      "💥",
-      column*CELL_SIZE+28,
-      row*CELL_SIZE+22,
-      "explosion-effect",
-      700
-    );
-
-    // 선정/비율/소리꽃 보호 로직은 동일 — 퇴장 visual만 착지 충격용
+    // 진형파괴 폭발 이모지 DOM(💥 / explosion-effect) 미생성 — 제거 로직만 유지
     removePlantFromCell(cell,false,{exitClass:"plant-raid-opening-exit"});
   });
 
@@ -8330,9 +8273,9 @@ function formatRemovePlantButton(){
 
   removeButton.innerHTML=
     `<span class="plant-card-copy">`+
-      `<span class="plant-name-label">식물 제거</span>`+
+      `<span class="plant-name-label"><span class="plant-name-text">식물 제거</span></span>`+
     `</span>`+
-    `<span class="plant-cost-label remove-refund-label">구매가의 30% 반환</span>`;
+    `<span class="plant-cost-label remove-refund-label"><span class="plant-cost-text">구매가의 30% 반환</span></span>`;
 
   removeButton.dataset.sidebarFormatted="true";
 }
@@ -8351,9 +8294,9 @@ function formatSidebarPlantButtons(){
 
     button.innerHTML=
       `<span class="plant-card-copy">`+
-        `<span class="plant-name-label ${lenClass}">${displayName}</span>`+
+        `<span class="plant-name-label ${lenClass}"><span class="plant-name-text">${displayName}</span></span>`+
       `</span>`+
-      `<span class="plant-cost-label">${cost}</span>`;
+      `<span class="plant-cost-label"><span class="plant-cost-text">${cost}</span></span>`;
 
     button.dataset.sidebarFormatted="true";
   });

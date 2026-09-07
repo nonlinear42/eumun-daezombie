@@ -11356,7 +11356,12 @@ body {
   --plant-name-fs: calc(11.5px * var(--readability-scale));
   --card-name-fs: calc(12.5px * var(--readability-scale));
   --card-name-fs-long: calc(11.5px * var(--readability-scale));
+  /* 소리꽃 가격(40)과 동일 기준 — 자음/모음 cost에 공유 */
   --card-cost-fs: calc(12.5px * var(--readability-scale));
+  /* 자음/모음 이름 공통 (4글자만 1px 축소) */
+  --sidebar-card-name-fs: calc(12.5px * var(--readability-scale));
+  --sidebar-card-name-fs-long: calc(11.5px * var(--readability-scale));
+  --sidebar-card-text-nudge-y: 0.5px;
 }
 
 /* 1) Zombie word label — ~15–20% 화면 가독성 보정, scaleX 금지 */
@@ -11850,18 +11855,19 @@ body {
 }
 
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-card-copy {
-  width: 46% !important;
-  height: 27% !important;
+  /* 소리꽃과 동일한 이름판 폭 — 과폭 시 텍스트가 크림 박스 오른쪽으로 밀림 */
+  width: 42% !important;
+  height: 26% !important;
 }
 
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label,
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-2,
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-3 {
-  font-size: calc(13.5px * var(--readability-scale, 1)) !important;
+  font-size: var(--sidebar-card-name-fs) !important;
 }
 
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-4 {
-  font-size: calc(12px * var(--readability-scale, 1)) !important;
+  font-size: var(--sidebar-card-name-fs-long) !important;
 }
 
 #game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-card-copy {
@@ -11890,5 +11896,413 @@ body {
 }
 
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-button .plant-cost-label {
-  font-size: calc(var(--card-cost-fs, 12px) * 1.08) !important;
+  /* 소리꽃(--card-cost-fs)과 동일 — 확대 금지 */
+  font-size: var(--card-cost-fs) !important;
+}
+
+/* =========================================================
+   사이드바 카드 텍스트: namePlate / costPlate flex 중앙 정렬
+   카드 geometry(left/top/width/height) 유지 · 수동 top 보정 제거
+   ========================================================= */
+
+/* 이름 plate: 래퍼가 flex 중앙 */
+.battle-sidebar .plant-button .plant-card-copy {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.battle-sidebar .plant-button .plant-name-label,
+.battle-sidebar .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .energy-group .plant-button .plant-name-label,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-4 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  overflow: hidden !important;
+  transform: none !important;
+  line-height: 1 !important;
+  letter-spacing: -0.15px !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+}
+
+.battle-sidebar .plant-button .plant-name-text {
+  display: block !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  font-synthesis: none !important;
+  letter-spacing: inherit !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: clip !important;
+  text-align: center !important;
+  /* 서울남산체 공통 광학 보정 (카드별 상이 보정 금지) */
+  transform: translateY(0.5px) !important;
+}
+
+.battle-sidebar .plant-button .plant-name-label.name-len-4 .plant-name-text {
+  letter-spacing: -0.25px !important;
+}
+
+/* 가격 plate: 숫자 span을 flex 중앙 */
+.battle-sidebar .plant-button .plant-cost-label,
+.battle-sidebar .plant-button .plant-meta-label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  line-height: 1 !important;
+  overflow: hidden !important;
+  transform: none !important;
+}
+
+.battle-sidebar .plant-button .plant-cost-text {
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  font-family: inherit !important;
+  letter-spacing: inherit !important;
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  transform: translateY(0.5px) !important;
+}
+
+/* 소리꽃: 이름 한 단계 상향 (박스 넘침 없이) */
+#game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-name-label,
+#game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-name-label.name-len-2,
+#game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-name-label.name-len-3,
+.battle-sidebar .energy-group .plant-button .plant-name-label,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-3 {
+  font-size: calc(14.5px * var(--readability-scale, 1)) !important;
+  letter-spacing: -0.12px !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-name-label,
+.battle-sidebar .energy-group .plant-button .plant-name-label {
+  transform: none !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-cost-label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  transform: none !important;
+}
+
+/* 열린 카테고리 이름 크기 — label에 두고 text가 inherit */
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-2,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-3 {
+  font-size: calc(13.5px * var(--readability-scale, 1)) !important;
+  transform: none !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-4 {
+  font-size: calc(12px * var(--readability-scale, 1)) !important;
+  transform: none !important;
+}
+
+#remove-button .plant-name-label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  transform: none !important;
+  padding: 0 !important;
+}
+
+#remove-button .plant-name-text {
+  transform: translateY(4px) !important;
+  line-height: 1 !important;
+}
+
+#remove-button .plant-cost-label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+#remove-button .plant-cost-text {
+  line-height: 1 !important;
+  transform: none !important;
+}
+
+/* =========================================================
+   자음/모음 카드 typography = 소리꽃 기준 통일
+   (소리꽃 자체 규칙은 변경하지 않음)
+   ========================================================= */
+
+/* 이전: 열린 카테고리 cost 1.08배 확대 → 소리꽃보다 커짐. 동일 크기로 복귀 */
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-cost-label,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-button .plant-cost-label,
+.battle-sidebar .consonant-group .plant-button .plant-cost-label,
+.battle-sidebar .vowel-group .plant-button .plant-cost-label {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: var(--card-cost-fs) !important;
+  font-weight: 900 !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  letter-spacing: -0.15px !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  transform: none !important;
+  scale: none !important;
+  overflow: hidden !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-cost-text,
+.battle-sidebar .consonant-group .plant-button .plant-cost-text,
+.battle-sidebar .vowel-group .plant-button .plant-cost-text {
+  display: block !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  font-stretch: normal !important;
+  letter-spacing: inherit !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  white-space: nowrap !important;
+  text-align: center !important;
+  transform: translateY(var(--sidebar-card-text-nudge-y, 0.5px)) !important;
+  scale: none !important;
+}
+
+/* 자음/모음 이름: 공통 1규칙 (카드별 top/translate 금지) */
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-card-copy,
+.battle-sidebar .consonant-group .plant-button .plant-card-copy,
+.battle-sidebar .vowel-group .plant-button .plant-card-copy {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label.name-len-2,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label.name-len-3,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label.name-len-4,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-2,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-3,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-4,
+.battle-sidebar .consonant-group .plant-button .plant-name-label,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .vowel-group .plant-button .plant-name-label,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-4 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: var(--sidebar-card-name-fs) !important;
+  font-weight: 700 !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  letter-spacing: -0.15px !important;
+  line-height: 1 !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  transform: none !important;
+  scale: none !important;
+}
+
+/* 4글자: 크기만 1px 축소, 정렬 규칙은 동일 */
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label.name-len-4,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-name-label.name-len-4,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-4 {
+  font-size: var(--sidebar-card-name-fs-long) !important;
+  letter-spacing: -0.2px !important;
+  transform: none !important;
+  scale: none !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-text,
+.battle-sidebar .consonant-group .plant-button .plant-name-text,
+.battle-sidebar .vowel-group .plant-button .plant-name-text {
+  display: block !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  font-family: inherit !important;
+  font-stretch: normal !important;
+  letter-spacing: inherit !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  text-align: center !important;
+  transform: translateY(var(--sidebar-card-text-nudge-y, 0.5px)) !important;
+  scale: none !important;
+}
+
+/* =========================================================
+   이름판 수평 중앙 + 가격 = 소리꽃 템플릿 최종 고정
+   (소리꽃 셀렉터는 변경하지 않음)
+   ========================================================= */
+
+/*
+  원인: left:50% + width만 주면 박스 왼쪽이 50%에 고정되고,
+  이름판이 크림보다 넓으면 텍스트 중심이 크림 중심보다 오른쪽으로 밀림.
+  → 크림 수평 중심에 left를 두고 translateX(-50%)로 판 자체를 중앙 배치.
+*/
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-card-copy,
+.battle-sidebar .consonant-group .plant-button .plant-card-copy,
+.battle-sidebar .vowel-group .plant-button .plant-card-copy {
+  left: 71% !important;
+  top: 29.5% !important;
+  width: 40% !important;
+  height: 26% !important;
+  transform: translateX(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label.name-len-2,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label.name-len-3,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .consonant-group .plant-button .plant-name-label,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .vowel-group .plant-button .plant-name-label,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-4 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+  text-align: center !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-text,
+.battle-sidebar .consonant-group .plant-button .plant-name-text,
+.battle-sidebar .vowel-group .plant-button .plant-name-text {
+  display: block !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  text-align: center !important;
+  /* 가로 쏠림 보정 금지(카드별 X 금지). 세로만 공통 광학 보정 */
+  transform: translateY(var(--sidebar-card-text-nudge-y, 0.5px)) !important;
+  scale: none !important;
+}
+
+/* 가격: 소리꽃과 동일 토큰 + 동일 plate 정렬 감각 */
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-cost-label,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-button .plant-cost-label,
+.battle-sidebar .consonant-group .plant-button .plant-cost-label,
+.battle-sidebar .vowel-group .plant-button .plant-cost-label {
+  left: 61% !important;
+  top: 63.5% !important;
+  width: 20% !important;
+  height: 16% !important;
+  transform: translateX(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: var(--card-cost-fs) !important;
+  font-weight: 900 !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  letter-spacing: -0.15px !important;
+  line-height: 1 !important;
+  overflow: hidden !important;
+  scale: none !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-cost-text,
+.battle-sidebar .consonant-group .plant-button .plant-cost-text,
+.battle-sidebar .vowel-group .plant-button .plant-cost-text {
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  letter-spacing: inherit !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  transform: translateY(var(--sidebar-card-text-nudge-y, 0.5px)) !important;
+  scale: none !important;
 }
