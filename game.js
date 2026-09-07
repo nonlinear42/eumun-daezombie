@@ -2675,6 +2675,13 @@ function updatePlantButtons(){
     else{button.classList.remove("no-energy");button.disabled=false;}
   });
 }
+function setPlantInfoPanelActive(active){
+  const panel=document.getElementById("plant-info");
+  if(!panel) return;
+  panel.classList.toggle("is-active", !!active);
+  panel.classList.toggle("is-idle", !active);
+}
+
 function showPlantInfo(type){
   const data=PLANT_DB[type];
   if(!data||!plantInfoContent) return;
@@ -2686,14 +2693,22 @@ function showPlantInfo(type){
     <div class="plant-info-layout">
       ${thumb}
       <div class="plant-info-details">
-        <div class="plant-info-name">${data.name}</div>
-        <div class="plant-info-meta">
-          <span class="plant-info-role">역할: ${data.role}</span>
-          <span class="plant-info-cost">비용: ${data.cost}</span>
+        <div class="plant-info-line">
+          <span class="plant-info-name">${data.name}</span>
+          <span class="plant-info-role">${data.role}</span>
+          <span class="plant-info-cost">비용 ${data.cost}</span>
         </div>
         <p class="plant-info-desc">${data.description}</p>
       </div>
     </div>`;
+  setPlantInfoPanelActive(true);
+}
+
+function clearPlantInfoPanel(){
+  if(plantInfoContent){
+    plantInfoContent.innerHTML=`식물을 선택하면 역할과 효과가 표시됩니다.`;
+  }
+  setPlantInfoPanelActive(false);
 }
 function ensureBattleMainColumn(){
   const layout=document.querySelector(".battle-layout");
@@ -2781,47 +2796,40 @@ function updateGameFitScale(){
   const root=document.getElementById("game-scale-root");
   if(!shell||!root) return;
 
-  // 측정 전 transform 제거 (레이아웃 박스에 scale 잔여 공간 방지)
-  root.style.transform="none";
-  root.style.width="auto";
-  root.style.height="auto";
-  shell.style.width="auto";
-  shell.style.height="auto";
-  shell.style.left="0px";
-  shell.style.top="0px";
-
-  void root.offsetWidth;
-
-  const rect=root.getBoundingClientRect();
-  const baseWidth=Math.max(
-    1,
-    Math.ceil(Math.max(root.scrollWidth, root.offsetWidth, rect.width))
-  );
-  const baseHeight=Math.max(
-    1,
-    Math.ceil(Math.max(root.scrollHeight, root.offsetHeight, rect.height))
-  );
-
-  GAME_FIT.baseWidth=baseWidth;
-  GAME_FIT.baseHeight=baseHeight;
-
+  // 확장 학교 배경(1672×941)을 viewport에 cover로 맞춤.
+  // UI는 동일 좌표계 위 오버레이 — 남색 레터박스/문서 스크롤 방지.
+  const DESIGN_W=1672;
+  const DESIGN_H=941;
   const availW=Math.max(1, window.innerWidth);
   const availH=Math.max(1, window.innerHeight);
-  const scale=Math.min(availW / baseWidth, availH / baseHeight, 1);
+  const scale=Math.max(availW / DESIGN_W, availH / DESIGN_H);
+
+  GAME_FIT.baseWidth=DESIGN_W;
+  GAME_FIT.baseHeight=DESIGN_H;
   GAME_FIT.scale=scale;
   battleCanvasFitScale=scale;
 
-  root.style.width=baseWidth+"px";
-  root.style.height=baseHeight+"px";
-  root.style.transformOrigin="top left";
-  root.style.transform=`scale(${scale})`;
+  shell.style.position="fixed";
+  shell.style.left="0px";
+  shell.style.top="0px";
+  shell.style.width=availW+"px";
+  shell.style.height=availH+"px";
+  shell.style.overflow="hidden";
 
-  const fittedW=Math.max(1, Math.round(baseWidth * scale));
-  const fittedH=Math.max(1, Math.round(baseHeight * scale));
-  shell.style.width=fittedW+"px";
-  shell.style.height=fittedH+"px";
-  shell.style.left=Math.max(0, Math.round((availW - fittedW) / 2))+"px";
-  shell.style.top=Math.max(0, Math.round((availH - fittedH) / 2))+"px";
+  root.style.position="absolute";
+  root.style.width=DESIGN_W+"px";
+  root.style.height=DESIGN_H+"px";
+  root.style.left="50%";
+  root.style.top="50%";
+  root.style.transformOrigin="center center";
+  root.style.transform=`translate(-50%, -50%) scale(${scale})`;
+
+  // 작은 화면 cover scale 보정: 화면상 글자가 디자인 대비 ~0.92 이하로 줄지 않게
+  // 큰 화면(scale≥0.92)에서는 readability=1 유지
+  const readability=Math.min(1.22, Math.max(1, 0.92 / scale));
+  const readabilityStr=readability.toFixed(4);
+  root.style.setProperty("--readability-scale", readabilityStr);
+  document.documentElement.style.setProperty("--readability-scale", readabilityStr);
 
   // fit scale 변경 시 canvas 백킹 해상도 재동기화 (CSS transform blur 우회)
   syncBattleCanvasResolution();
@@ -2900,7 +2908,10 @@ removeButton.addEventListener("click",function(){
   removeMode=true; selectedPlant=null; selectedCost=0;
   plantButtons.forEach(button=>button.classList.remove("selected"));
   removeButton.classList.add("selected");
-  if(plantInfoContent) plantInfoContent.innerHTML=`<strong>🪏 식물 제거</strong><br>제거할 식물을 선택하세요. ${raidMode ? "RAID에서는 구매 비용의 70%가 환불됩니다." : "구매 비용의 30%가 환불됩니다."}`;
+  if(plantInfoContent){
+    plantInfoContent.innerHTML=`<div class="plant-info-layout plant-info-layout-status"><div class="plant-info-details"><div class="plant-info-line"><span class="plant-info-name">식물 제거</span><span class="plant-info-role">${raidMode ? "환불 70%" : "환불 30%"}</span></div><p class="plant-info-desc">제거할 식물을 선택하세요.</p></div></div>`;
+  }
+  setPlantInfoPanelActive(true);
 });
 
 function createEffect(text,x,y,className,duration=500){
@@ -6950,12 +6961,9 @@ function startRaid(){
 
   if(plantInfoContent){
     plantInfoContent.innerHTML=
-      `<strong>👑 FINAL BOSS</strong><br>`+
-      `모든 레인의 공격 식물이 보스를 공격할 수 있습니다. `+
-      `보스 단어는 <strong>20초마다 변경</strong>되며, `+
-      `현재 단어에 포함된 특징을 가진 식물만 공격합니다. `+
-      `<strong>보스가 왼쪽 끝에 도달하기 전에 격파하세요.</strong>`;
+      `<div class="plant-info-layout plant-info-layout-status"><div class="plant-info-details"><div class="plant-info-line"><span class="plant-info-name">FINAL BOSS</span><span class="plant-info-role">20초마다 단어 변경</span></div><p class="plant-info-desc">모든 레인 공격 식물이 보스를 공격합니다. 왼쪽 끝에 도달하기 전에 격파하세요.</p></div></div>`;
   }
+  setPlantInfoPanelActive(true);
 }
 function showRaidIntro(){
   waveInProgress=false;forceUnpauseGame();updatePauseUI();unlockTitle.textContent="👑 FINAL BOSS 등장";unlockContent.innerHTML=`<h2>아직 끝나지 않았습니다.</h2><p>Final Wave를 막아냈지만 마지막 적이 등장했습니다.</p><p><strong>모든 레인의 공격 식물이 하나의 보스를 공격합니다.</strong></p><p>보스의 단어는 <strong>20초마다 변경</strong>됩니다. 단어가 바뀌면 공격 가능한 음운 특징도 함께 바뀝니다.</p><p>🧊 저모음은 보스 행동을 잠시 멈추고, 🐌 후설모음은 보스의 이동 속도를 늦추며, ❄ 전설모음은 보스를 완전히 정지시킵니다.</p><p>보스 등장과 동시에 <strong>공격·지원 식물의 약 60%</strong>가 파괴됩니다. 소리꽃은 파괴되지 않습니다. 남은 소리씨앗으로 빠르게 진형을 다시 구축하세요.</p><p>🪏 <strong>RAID에서는 식물을 제거하면 구매 비용의 70%를 환불</strong>합니다. 보스 단어에 맞춰 진형을 적극적으로 재배치하세요.</p><p>⚡ <strong>RAID 유음 공명:</strong> 유음 식물들이 보스를 총 3번 공격하면 공명 추가타가 발생합니다. 연구개음·파찰음·비음도 보스전에서는 각자의 특성이 단일 대상에 맞게 강화됩니다.</p><p>보스는 약 <strong>6초마다</strong> 한 레인의 가장 앞쪽 식물에 충격파를 사용합니다.</p><p>보스는 <strong>세로 5레인 × 가로 1칸 크기</strong>로 천천히 전진합니다. 현재 보스와 맞닿은 한 열의 식물만 공격하며, 그 열을 뚫으면 다시 전진합니다. <strong>왼쪽 끝에 도달하면 즉시 패배합니다.</strong></p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="RAID 시작";unlockNextButton.dataset.action="start-raid";delete unlockNextButton.dataset.wave;
@@ -7529,7 +7537,7 @@ function resetForMainGame(){gameStartTime=nowGame();finalScoreCalculated=false;r
   clearTutorialGuide();
   if(practiceToolbar) practiceToolbar.classList.add("hidden");
   if(practicePanel) practicePanel.classList.add("hidden");
-  if(currentSpawnTimer){clearInterval(currentSpawnTimer);currentSpawnTimer=null;}zombies.forEach(z=>{z.alive=false;if(z.element.parentElement)z.element.remove();});zombies=[];if(raidBoss){if(raidBoss.body&&raidBoss.body.parentElement)raidBoss.body.remove();detachRaidBossHud();}raidBoss=null;raidMode=false;updateRaidRefundUI();raidWordBag=[];raidLastWordId=null;raidLiquidResonance=0;tutorialMode=false;tutorialSpawnIndex=0;tutorialEnergyBonusGiven=false;tutorialGuide.classList.add("hidden");selectedPlant=null;selectedCost=0;removeMode=false;energy=350;life=5;score=0;currentWave=1;waveZombieCount=0;resolvedZombies=0;waveInProgress=false;gameOver=false;waveWordBag=[];waveEnemyTypeBag=[];lastSpawnedWordId=null;missedWords=[];missedFeatureCounts={};plantPlacementCounts={};unlockedPlants=new Set(INITIAL_PLANTS);energyDisplay.textContent=energy;lifeDisplay.textContent=life;scoreDisplay.textContent=score;waveDisplay.textContent=currentWave;restartButton.style.display="none";removeButton.disabled=false;removeButton.classList.remove("selected");plantButtons.forEach(button=>button.classList.remove("selected"));if(plantInfoContent)plantInfoContent.innerHTML=`식물을 선택하면 역할과 효과가 표시됩니다.`;updatePlantButtons();createBoard();
+  if(currentSpawnTimer){clearInterval(currentSpawnTimer);currentSpawnTimer=null;}zombies.forEach(z=>{z.alive=false;if(z.element.parentElement)z.element.remove();});zombies=[];if(raidBoss){if(raidBoss.body&&raidBoss.body.parentElement)raidBoss.body.remove();detachRaidBossHud();}raidBoss=null;raidMode=false;updateRaidRefundUI();raidWordBag=[];raidLastWordId=null;raidLiquidResonance=0;tutorialMode=false;tutorialSpawnIndex=0;tutorialEnergyBonusGiven=false;tutorialGuide.classList.add("hidden");selectedPlant=null;selectedCost=0;removeMode=false;energy=350;life=5;score=0;currentWave=1;waveZombieCount=0;resolvedZombies=0;waveInProgress=false;gameOver=false;waveWordBag=[];waveEnemyTypeBag=[];lastSpawnedWordId=null;missedWords=[];missedFeatureCounts={};plantPlacementCounts={};unlockedPlants=new Set(INITIAL_PLANTS);energyDisplay.textContent=energy;lifeDisplay.textContent=life;scoreDisplay.textContent=score;waveDisplay.textContent=currentWave;restartButton.style.display="none";removeButton.disabled=false;removeButton.classList.remove("selected");plantButtons.forEach(button=>button.classList.remove("selected"));if(plantInfoContent)plantInfoContent.innerHTML=`식물을 선택하면 역할과 효과가 표시됩니다.`;setPlantInfoPanelActive(false);updatePlantButtons();createBoard();
 }
 
 function ensurePracticeModeUI(){
@@ -7670,8 +7678,9 @@ function applyPracticeSetup(){
   if(practicePanel) practicePanel.classList.add("hidden");
 
   if(plantInfoContent){
-    plantInfoContent.innerHTML=`<strong>🧪 테스트 모드</strong><br>모든 식물 해금 · 배치 비용 0 · 생명 99 · 특정 적 즉시 소환 가능`;
+    plantInfoContent.innerHTML=`<div class="plant-info-layout plant-info-layout-status"><div class="plant-info-details"><div class="plant-info-line"><span class="plant-info-name">테스트 모드</span><span class="plant-info-role">배치 비용 0</span></div><p class="plant-info-desc">모든 식물 해금 · 생명 99 · 특정 적 즉시 소환 가능</p></div></div>`;
   }
+  setPlantInfoPanelActive(true);
 }
 
 function startPracticeWave(wave){
@@ -7861,10 +7870,9 @@ function startRaidTest(){gameStartTime=nowGame();finalScoreCalculated=false;
 
   if(plantInfoContent){
     plantInfoContent.innerHTML=
-      `<strong>🧪 RAID TEST</strong><br>`+
-      `파이널 직전 상황을 가정한 빽빽한 테스트 진형이 자동 배치되었습니다. `+
-      `RAID 시작을 누르면 이 진형의 약 60%가 무작위로 파괴됩니다.`;
+      `<div class="plant-info-layout plant-info-layout-status"><div class="plant-info-details"><div class="plant-info-line"><span class="plant-info-name">RAID TEST</span><span class="plant-info-role">파이널 직전 진형</span></div><p class="plant-info-desc">빽빽한 테스트 진형이 배치되었습니다. RAID 시작 시 약 60%가 파괴됩니다.</p></div></div>`;
   }
+  setPlantInfoPanelActive(true);
 
   showRaidIntro();
 }
@@ -8659,7 +8667,7 @@ function injectVisualAssetStyles(){
       align-items: center;
       gap: 3px;
       width: max-content;
-      padding: 3px 8px;
+      padding: 4px 9px;
       border-radius: 8px;
       background: rgba(255,255,248,.97);
       border: 1px solid rgba(74,108,52,.55);
@@ -8673,7 +8681,7 @@ function injectVisualAssetStyles(){
 
     .zombie-type-badge {
       font-family: "SeoulNamsanGame", sans-serif;
-      font-size: 12px;
+      font-size: calc(12.5px * var(--readability-scale, 1));
       font-weight: 700;
       font-stretch: normal;
       font-synthesis: none;
@@ -8684,13 +8692,13 @@ function injectVisualAssetStyles(){
 
     .zombie-word-text {
       font-family: "SeoulNamsanGame", sans-serif;
-      font-size: 13px;
+      font-size: calc(13.5px * var(--readability-scale, 1));
       font-weight: 700;
       font-style: normal;
       font-stretch: normal;
       font-synthesis: none;
       letter-spacing: 0;
-      line-height: 1.15;
+      line-height: 1.2;
       color: #1a2e12;
       white-space: nowrap;
       transform: translateY(1px);

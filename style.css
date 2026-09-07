@@ -10871,3 +10871,745 @@ body {
   font-family: "SeoulNamsanGame", sans-serif !important;
   font-weight: 700 !important;
 }
+
+/* =========================================================
+   음운 디펜스 - school_field 확장 배경 (1672×941)
+   보드 990×450 · CELL/좌표/HUD/사이드바 불변
+   이미지 1:1 contain(비율 일치) · cover 사용 안 함
+   운동장 잔디(≈120..1447 × 460..940)에 보드 정렬
+   ========================================================= */
+
+.battle-layout {
+  --scene-width: 1672px;
+  --scene-fit: min(1, calc((100vw - 260px) / var(--scene-width)));
+  --scene-display-width: calc(var(--scene-width) * var(--scene-fit));
+  --scene-display-height: calc(var(--scene-width) * 941 / 1672 * var(--scene-fit));
+  --field-width: var(--scene-display-width) !important;
+  --field-height: var(--scene-display-height) !important;
+  width: min(calc(220px + 14px + var(--scene-width)), calc(100vw - 24px)) !important;
+  grid-template-columns: 220px var(--scene-display-width) !important;
+}
+
+.battle-center {
+  width: var(--scene-display-width) !important;
+  height: var(--scene-display-height) !important;
+}
+
+.battle-scene {
+  width: var(--scene-width);
+  aspect-ratio: 1672 / 941;
+  --board-overlay-left: calc(289 / 1672 * 100%);
+  --board-overlay-top: calc(460 / 941 * 100%);
+}
+
+.battle-scene-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  object-position: center center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.game-board-viewport,
+.playfield-lane-overlay {
+  left: var(--board-overlay-left) !important;
+  top: var(--board-overlay-top) !important;
+  width: 990px !important;
+  height: 450px !important;
+}
+
+#game-scale-root .battle-layout {
+  --scene-width: 1672px !important;
+  --scene-fit: 1 !important;
+  --scene-display-width: 1672px !important;
+  --scene-display-height: 941px !important;
+  --field-width: 1672px !important;
+  --field-height: 941px !important;
+  width: calc(220px + 14px + 1672px) !important;
+  max-width: none !important;
+  grid-template-columns: 220px 1672px !important;
+}
+
+#game-scale-root .battle-center {
+  width: 1672px !important;
+  height: 941px !important;
+}
+
+#game-scale-root .battle-scene {
+  width: 1672px !important;
+  aspect-ratio: 1672 / 941;
+  zoom: 1 !important;
+}
+
+#game-scale-root #plant-info.plant-info-bottom,
+#game-scale-root .battle-main > #plant-info {
+  max-width: 1672px !important;
+}
+
+#game-scale-root .tutorial-guide,
+#game-scale-root .tool-menu {
+  width: calc(220px + 14px + 1672px) !important;
+}
+
+@media (max-width: 1290px) {
+  #game-scale-root .battle-layout {
+    --scene-width: 1672px !important;
+    width: calc(220px + 14px + 1672px) !important;
+    grid-template-columns: 220px 1672px !important;
+  }
+}
+
+@media (max-width: 1279px) {
+  #game-scale-root .tutorial-guide,
+  #game-scale-root .tool-menu,
+  #game-scale-root .battle-layout {
+    width: calc(220px + 14px + 1672px) !important;
+  }
+
+  #game-scale-root #plant-info.plant-info-bottom,
+  #game-scale-root .battle-main > #plant-info {
+    max-width: 1672px !important;
+  }
+}
+
+/* =========================================================
+   음운 디펜스 - fullscreen school overlay layout (1차)
+   배경 1672×941 cover → viewport 가득
+   HUD / 사이드바 / plant-info = floating overlay
+   보드 990×450 · lane · 카드 이미지 · HUD 이미지 불변
+   ========================================================= */
+
+html,
+body {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+body {
+  min-height: 100% !important;
+  background: #0b1c10 !important;
+  background-image: none !important;
+}
+
+#game-viewport-shell {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+#game-viewport-shell > #game-scale-root {
+  pointer-events: auto !important;
+}
+
+#game-scale-root {
+  position: absolute !important;
+  width: 1672px !important;
+  height: 941px !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  background: transparent !important;
+}
+
+/* ---- 전투 씬: 루트 전체를 학교 배경으로 ---- */
+#game-scale-root .battle-layout {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: 1672px !important;
+  height: 941px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+  grid-template-columns: none !important;
+  gap: 0 !important;
+  max-width: none !important;
+  --scene-width: 1672px !important;
+  --scene-fit: 1 !important;
+  --scene-display-width: 1672px !important;
+  --scene-display-height: 941px !important;
+  --field-width: 1672px !important;
+  --field-height: 941px !important;
+}
+
+#game-scale-root .battle-main,
+#game-scale-root .battle-center,
+#game-scale-root .battle-scene {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: 1672px !important;
+  height: 941px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+}
+
+#game-scale-root .battle-scene {
+  aspect-ratio: auto !important;
+  zoom: 1 !important;
+  --board-overlay-left: calc(289 / 1672 * 100%) !important;
+  --board-overlay-top: calc(460 / 941 * 100%) !important;
+}
+
+#game-scale-root .battle-scene-bg,
+#game-scale-root .battle-scene-image {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+}
+
+#game-scale-root .battle-scene-image {
+  object-fit: fill !important;
+  object-position: center center !important;
+}
+
+#game-scale-root .game-board-viewport,
+#game-scale-root .playfield-lane-overlay {
+  left: var(--board-overlay-left) !important;
+  top: var(--board-overlay-top) !important;
+  width: 990px !important;
+  height: 450px !important;
+}
+
+/* ---- 상단 HUD: 남색 바 없이 배경 위 플로팅 ---- */
+#game-scale-root .status-bar {
+  position: absolute !important;
+  top: 14px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 40 !important;
+  width: min(920px, 56%) !important;
+  max-width: 920px !important;
+  margin: 0 !important;
+  padding: 4px 8px !important;
+  gap: 8px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.28));
+  pointer-events: none !important;
+}
+
+#game-scale-root .status-bar .hud-slot {
+  pointer-events: none !important;
+}
+
+#game-scale-root .page-brand-cluster {
+  position: absolute !important;
+  top: 10px !important;
+  right: 14px !important;
+  z-index: 45 !important;
+}
+
+/* ---- 좌측 식물 패널: compact floating ---- */
+#game-scale-root .battle-sidebar,
+#game-scale-root .battle-sidebar-left {
+  position: absolute !important;
+  left: 10px !important;
+  top: 96px !important;
+  width: 228px !important;
+  max-height: calc(941px - 96px - 86px) !important;
+  margin: 0 !important;
+  padding: 8px 6px 6px !important;
+  z-index: 30 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 14px !important;
+  background: rgba(18, 28, 22, 0.42) !important;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+#game-scale-root .battle-sidebar .plant-group {
+  margin: 0 0 6px !important;
+  padding: 6px 5px 5px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+  background: rgba(22, 36, 28, 0.34) !important;
+  box-shadow: none !important;
+}
+
+#game-scale-root .battle-sidebar .plant-group-title {
+  margin-bottom: 4px !important;
+  padding-bottom: 3px !important;
+  border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(240, 248, 236, 0.9) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+#game-scale-root .battle-sidebar .sidebar-remove-wrap {
+  margin-top: 4px !important;
+}
+
+/* ---- 선택 정보: HUD(WAVE·생명) 아래, 상단 중앙 쪽 compact bar ---- */
+#game-scale-root #plant-info.plant-info-bottom,
+#game-scale-root .battle-main > #plant-info {
+  position: absolute !important;
+  /* WAVE↔생명 사이(씬 중앙) 기준, 아주 약간 좌측 */
+  left: 48.5% !important;
+  top: 104px !important;
+  bottom: auto !important;
+  transform: translateX(-50%) !important;
+  z-index: 35 !important;
+  width: 640px !important; /* 560 → ~14% 확대 */
+  max-width: 640px !important;
+  height: 64px !important;
+  min-height: 64px !important;
+  max-height: 64px !important;
+  margin: 0 !important;
+  padding: 9px 16px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  border: 1px solid rgba(210, 230, 255, 0.16) !important;
+  border-radius: 10px !important;
+  background: rgba(16, 28, 48, 0.62) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  text-align: left !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+#game-scale-root #plant-info.plant-info-bottom.is-idle,
+#game-scale-root .battle-main > #plant-info.is-idle {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+#game-scale-root #plant-info.plant-info-bottom.is-active,
+#game-scale-root .battle-main > #plant-info.is-active {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#game-scale-root #plant-info.plant-info-bottom > strong {
+  display: none !important;
+}
+
+#game-scale-root #plant-info.plant-info-bottom #plant-info-content {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 13px !important;
+  line-height: 1.3 !important;
+  color: rgba(236, 244, 255, 0.92) !important;
+}
+
+#game-scale-root .plant-info-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+}
+
+#game-scale-root .plant-info-thumb,
+#game-scale-root .plant-info-thumb-fallback {
+  width: 46px !important;
+  height: 46px !important;
+  flex: 0 0 46px !important;
+  object-fit: contain !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+}
+
+#game-scale-root .plant-info-thumb-fallback {
+  font-size: 24px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-radius: 8px !important;
+}
+
+#game-scale-root .plant-info-details {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 4px !important;
+}
+
+#game-scale-root .plant-info-line {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: baseline !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+#game-scale-root .plant-info-name {
+  margin: 0 !important;
+  flex: 0 0 auto !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  color: #fff8e8 !important;
+  white-space: nowrap !important;
+}
+
+#game-scale-root .plant-info-role,
+#game-scale-root .plant-info-cost,
+#game-scale-root .plant-info-meta {
+  margin: 0 !important;
+  flex: 0 0 auto !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  color: #b8d0ef !important;
+  white-space: nowrap !important;
+}
+
+#game-scale-root .plant-info-desc {
+  margin: 0 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1.25 !important;
+  color: rgba(232, 240, 255, 0.9) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* ---- RAID dock: 선택정보 바 아래(하늘), 건물·레인과 분리 ---- */
+#game-scale-root #raid-hud-dock {
+  position: absolute !important;
+  left: calc(289 / 1672 * 100%) !important;
+  top: 174px !important;
+  width: 990px !important;
+  z-index: 36 !important;
+  pointer-events: none !important;
+}
+
+/* ---- 개발 TEST / 빈 tool-menu: 일반 플레이에서 자리 차지 금지 ---- */
+#game-scale-root .tool-menu {
+  display: none !important;
+}
+
+#practice-toolbar.hidden,
+#dev-test-menu.hidden {
+  display: none !important;
+}
+
+#practice-toolbar:not(.hidden) {
+  position: fixed !important;
+  right: 12px !important;
+  bottom: 12px !important;
+  z-index: 12000 !important;
+  width: auto !important;
+  max-width: min(320px, 42vw) !important;
+}
+
+/* ---- 튜토리얼 안내: 우측 플로팅 (로직/화살표 불변) ---- */
+#game-scale-root .tutorial-guide {
+  position: absolute !important;
+  right: 16px !important;
+  top: 110px !important;
+  width: min(300px, 18%) !important;
+  max-width: 300px !important;
+  margin: 0 !important;
+  z-index: 38 !important;
+  box-sizing: border-box !important;
+}
+
+/* 시작 화면 등 body 오버레이는 shell 위에 */
+#start-overlay,
+#unlock-overlay,
+.end-illustration-overlay,
+#pause-overlay {
+  z-index: 10050;
+}
+
+/* =========================================================
+   가독성 패치 — 핵심 텍스트 최소 크기 보장
+   layout/보드좌표/카드·HUD 이미지 불변
+   --readability-scale: updateGameFitScale() (작은 cover scale 보정)
+   ========================================================= */
+
+:root {
+  --readability-scale: 1;
+  --zombie-word-fs: calc(13.5px * var(--readability-scale));
+  --zombie-badge-fs: calc(12.5px * var(--readability-scale));
+  --plant-name-fs: calc(11.5px * var(--readability-scale));
+  --card-name-fs: calc(12.5px * var(--readability-scale));
+  --card-name-fs-long: calc(11.5px * var(--readability-scale));
+  --card-cost-fs: calc(12.5px * var(--readability-scale));
+}
+
+/* 1) Zombie word label — ~15–20% 화면 가독성 보정, scaleX 금지 */
+#battle-overlay .zombie.zombie-canvas-hud > .zombie-word-label {
+  padding: 4px 9px !important;
+  gap: 4px !important;
+  width: max-content !important;
+  max-width: none !important;
+}
+
+#battle-overlay .zombie.zombie-canvas-hud .zombie-word-text {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: var(--zombie-word-fs) !important;
+  font-weight: 700 !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  letter-spacing: 0 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  transform: translateY(1px) !important;
+  scale: none !important;
+  flex-shrink: 0 !important;
+  width: max-content !important;
+  max-width: none !important;
+  display: inline-block !important;
+}
+
+#battle-overlay .zombie.zombie-canvas-hud .zombie-type-badge {
+  font-size: var(--zombie-badge-fs) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  transform: none !important;
+  flex-shrink: 0 !important;
+}
+
+/* 2) Plant name — ~10–15%, anchor/위치 유지 */
+#battle-overlay > .plant-name.plant-name-canvas-overlay,
+.game-board .plant > .plant-name,
+.game-board .plant.plant-canvas-hud > .plant-name {
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: var(--plant-name-fs) !important;
+  font-weight: 700 !important;
+  font-synthesis: none !important;
+  letter-spacing: 0 !important;
+  line-height: 1.25 !important;
+  padding: 2px 5px !important;
+  width: max-content !important;
+  max-width: none !important;
+  white-space: nowrap !important;
+}
+
+/* 3) Sidebar card name / price — geometry 유지, 글자만 */
+.battle-sidebar .plant-name-label,
+.battle-sidebar .plant-button .plant-name-label,
+.battle-sidebar .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .energy-group .plant-button .plant-name-label,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-4 {
+  font-size: var(--card-name-fs) !important;
+  letter-spacing: -0.15px !important;
+  line-height: 1.35 !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.battle-sidebar .plant-name-label.name-len-4,
+.battle-sidebar .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-4 {
+  font-size: var(--card-name-fs-long) !important;
+  letter-spacing: -0.25px !important;
+  line-height: 1.35 !important;
+  font-stretch: normal !important;
+  transform: translate(-2px, 1px) !important;
+  overflow: visible !important;
+}
+
+.battle-sidebar .plant-button .plant-cost-label,
+.battle-sidebar .plant-button .plant-meta-label {
+  font-size: var(--card-cost-fs) !important;
+  font-weight: 900 !important;
+  line-height: 1.15 !important;
+  padding: 2px 1px !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* 4) 선택 정보 패널 — 위치/크기 유지, 내부 텍스트만 */
+#game-scale-root .plant-info-name {
+  font-size: calc(17px * var(--readability-scale)) !important;
+  line-height: 1.25 !important;
+}
+
+#game-scale-root .plant-info-role,
+#game-scale-root .plant-info-cost,
+#game-scale-root .plant-info-meta {
+  font-size: calc(14px * var(--readability-scale)) !important;
+  line-height: 1.25 !important;
+}
+
+#game-scale-root .plant-info-desc {
+  font-size: calc(13.5px * var(--readability-scale)) !important;
+  line-height: 1.3 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#game-scale-root .plant-info-details {
+  gap: 3px !important;
+}
+
+/* 5) Wave / 특수좀비 modal — viewport 내 유지 + 본문 스크롤 + 버튼 고정 */
+.unlock-overlay:not(.hidden) {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  padding: 12px !important;
+  box-sizing: border-box !important;
+}
+
+.unlock-overlay .unlock-card {
+  display: flex !important;
+  flex-direction: column !important;
+  width: min(520px, 92vw) !important;
+  max-width: 92vw !important;
+  max-height: min(88vh, 760px) !important;
+  margin: 0 !important;
+  padding: 22px 22px 16px !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.unlock-overlay .unlock-card h2,
+.unlock-overlay #unlock-title {
+  flex: 0 0 auto !important;
+  margin: 0 0 10px !important;
+  font-size: clamp(20px, 2.4vw, 26px) !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+}
+
+.unlock-overlay #unlock-content {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  margin: 0 0 14px !important;
+  padding-right: 4px !important;
+  font-size: clamp(14px, 1.55vw, 16px) !important;
+  font-weight: 500 !important;
+  line-height: 1.55 !important;
+  text-align: left !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.unlock-overlay #unlock-content p,
+.unlock-overlay .unlock-card p {
+  font-size: inherit !important;
+  line-height: 1.55 !important;
+  margin: 0.45em 0 !important;
+}
+
+.unlock-overlay .unlock-plant-name {
+  font-size: clamp(16px, 1.8vw, 18px) !important;
+}
+
+.unlock-overlay #unlock-next-button {
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
+  min-height: clamp(46px, 6.2vh, 54px) !important;
+  margin-top: auto !important;
+  padding: 12px 18px !important;
+  font-size: clamp(15px, 1.7vw, 17px) !important;
+  font-weight: 700 !important;
+}
+
+/* =========================================================
+   카드 이름 clipping 수정
+   카드 ~6% 확대 + 이름 fs -1px + 이름영역 overflow/line-height
+   가격 위치·크기 불변 · 카드 PNG 불변 · 보드/HUD 불변
+   ========================================================= */
+
+#game-scale-root .battle-sidebar,
+#game-scale-root .battle-sidebar-left {
+  width: 238px !important; /* 228 → ~4.4% 패널, 카드 실표시 ~7% */
+  left: 8px !important;
+  max-height: calc(941px - 96px - 72px) !important;
+  padding: 7px 5px 5px !important;
+}
+
+#game-scale-root .battle-sidebar .plant-group {
+  margin: 0 0 5px !important;
+  padding: 5px 4px 4px !important;
+}
+
+#game-scale-root .battle-sidebar .plant-group-buttons {
+  gap: 5px !important;
+  column-gap: 5px !important;
+  row-gap: 5px !important;
+}
+
+/* 이름 cream 영역: 위·아래 clipping 여유 (가격 absolute 박스는 그대로) */
+.battle-sidebar .plant-button .plant-card-copy {
+  top: 29.5% !important;
+  width: 44% !important;
+  height: 26% !important;
+  padding: 1px 1px 2px !important;
+  overflow: visible !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.battle-sidebar .plant-button .plant-name-label,
+.battle-sidebar .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .energy-group .plant-button .plant-name-label,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-2,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-3,
+.battle-sidebar .energy-group .plant-button .plant-name-label.name-len-4 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  font-stretch: normal !important;
+  font-synthesis: none !important;
+  /* 3·4글자 공통 baseline — scaleX/찌그러뜨림 금지 */
+  transform: translate(-2px, 1px) !important;
+  line-height: 1.35 !important;
+  letter-spacing: -0.15px !important;
+}
+
+.battle-sidebar .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .consonant-group .plant-button .plant-name-label.name-len-4,
+.battle-sidebar .vowel-group .plant-button .plant-name-label.name-len-4 {
+  font-size: var(--card-name-fs-long) !important;
+  letter-spacing: -0.25px !important;
+  transform: translate(-2px, 1px) !important;
+}
