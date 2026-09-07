@@ -6815,13 +6815,7 @@ function startRaidBossEntrance(){
     void bossBody.offsetWidth;
     bossBody.classList.add("raid-boss-landing");
 
-    // 기존 shockwave VFX 재사용 (디자인/함수 본문 미수정). 착지 충격만 — boss_shockwave SFX는 재생하지 않음
-    createRaidLaneShockwaveEffect(RAID_CONFIG.pathRow);
-    if(BOARD_ROWS>2){
-      createRaidLaneShockwaveEffect(Math.max(0,RAID_CONFIG.pathRow-1));
-      createRaidLaneShockwaveEffect(Math.min(BOARD_ROWS-1,RAID_CONFIG.pathRow+1));
-    }
-
+    // 착지 landing shockwave DOM(×3) 미생성 — 전투 중 주기 shockwave VFX는 유지
     // 착지 순간에 기존 60% 제거 로직 실행
     destroyPlantsForRaidOpening();
 
