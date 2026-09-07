@@ -2759,7 +2759,43 @@ function hideRaidHudDock(){
 function detachRaidBossHud(){
   clearRaidBossWordChangeFx();
   if(raidBoss?.hud?.parentElement) raidBoss.hud.remove();
+  if(raidBoss){
+    raidBoss.hudEls=null;
+    raidBoss.uiState=null;
+  }
   hideRaidHudDock();
+}
+
+/** BOSS HUD querySelector 결과를 1회 캐시. HUD 재생성 시 반드시 다시 호출. */
+function cacheRaidBossHudElements(hud){
+  if(!raidBoss||!hud) return null;
+  raidBoss.hudEls={
+    hud,
+    fill:hud.querySelector(".raid-hp-fill"),
+    trail:hud.querySelector(".raid-hp-trail"),
+    text:hud.querySelector(".raid-hp-text"),
+    word:hud.querySelector(".raid-word"),
+    countdown:hud.querySelector(".raid-countdown"),
+    status:hud.querySelector(".raid-status")
+  };
+  // 캐시 갱신 직후엔 한 번 전부 write어 시각 동기화
+  raidBoss.uiState=null;
+  raidBoss.uiHpPct=undefined;
+  raidBoss.uiFrozen=undefined;
+  return raidBoss.hudEls;
+}
+
+function getRaidBossHudElements(){
+  if(!raidBoss?.hud) return null;
+  const cached=raidBoss.hudEls;
+  if(
+    cached&&
+    cached.hud===raidBoss.hud&&
+    raidBoss.hud.isConnected
+  ){
+    return cached;
+  }
+  return cacheRaidBossHudElements(raidBoss.hud);
 }
 
 function placePlantInfoBelowBoard(){
@@ -2778,12 +2814,13 @@ function placePlantInfoBelowBoard(){
 }
 
 /* =========================================================
-   Viewport fit scale — 디자인 기준 크기를 유지한 채 전체 축소
+   Viewport fit — 고정 비율 game-root 통째로 uniform scale
+   (한글 도형 모서리 스케일처럼 width/height 동일 배율)
    ========================================================= */
 
 const GAME_FIT={
-  baseWidth:0,
-  baseHeight:0,
+  baseWidth:1672,
+  baseHeight:941,
   scale:1,
   raf:0,
   resizeBound:false
@@ -2802,42 +2839,66 @@ function updateGameFitScale(){
   const root=document.getElementById("game-scale-root");
   if(!shell||!root) return;
 
-  // 확장 학교 배경(1672×941)을 viewport에 cover로 맞춤.
-  // UI는 동일 좌표계 위 오버레이 — 남색 레터박스/문서 스크롤 방지.
-  const DESIGN_W=1672;
-  const DESIGN_H=941;
-  const availW=Math.max(1, window.innerWidth);
-  const availH=Math.max(1, window.innerHeight);
-  const scale=Math.max(availW / DESIGN_W, availH / DESIGN_H);
+  const BASE_WIDTH=1672;
+  const BASE_HEIGHT=941;
 
-  GAME_FIT.baseWidth=DESIGN_W;
-  GAME_FIT.baseHeight=DESIGN_H;
-  GAME_FIT.scale=scale;
-  battleCanvasFitScale=scale;
+  // 레이아웃 뷰포트(스크롤바 제외) — 개별 UI 재배치 없이 통째로 contain
+  const viewportWidth=Math.max(
+    1,
+    document.documentElement.clientWidth||window.innerWidth||1
+  );
+  const viewportHeight=Math.max(
+    1,
+    document.documentElement.clientHeight||window.innerHeight||1
+  );
 
+  const s=Math.min(
+    viewportWidth/BASE_WIDTH,
+    viewportHeight/BASE_HEIGHT
+  );
+
+  GAME_FIT.baseWidth=BASE_WIDTH;
+  GAME_FIT.baseHeight=BASE_HEIGHT;
+  GAME_FIT.scale=s;
+  battleCanvasFitScale=s;
+
+  // 배경 layer: viewport full-bleed (game-root와 분리, 학교 이미지 1회)
   shell.style.position="fixed";
-  shell.style.left="0px";
-  shell.style.top="0px";
-  shell.style.width=availW+"px";
-  shell.style.height=availH+"px";
+  shell.style.inset="0px";
+  shell.style.width="100%";
+  shell.style.height="100%";
   shell.style.overflow="hidden";
+  shell.style.backgroundColor="#0b1c10";
+  shell.style.backgroundImage='url("./images/backgrounds/school_field.png")';
+  shell.style.backgroundRepeat="no-repeat";
+  shell.style.backgroundPosition="center center";
+  shell.style.backgroundSize="cover";
+
+  // 고정 크기 game-root + 단일 uniform scale, top-left origin + 명시적 중앙 배치
+  // (스케일 후 bounding box = BASE*s 가 항상 viewport 안에 들어옴)
+  const scaledW=BASE_WIDTH*s;
+  const scaledH=BASE_HEIGHT*s;
+  const left=(viewportWidth-scaledW)/2;
+  const top=(viewportHeight-scaledH)/2;
 
   root.style.position="absolute";
-  root.style.width=DESIGN_W+"px";
-  root.style.height=DESIGN_H+"px";
-  root.style.left="50%";
-  root.style.top="50%";
-  root.style.transformOrigin="center center";
-  root.style.transform=`translate(-50%, -50%) scale(${scale})`;
+  root.style.width=BASE_WIDTH+"px";
+  root.style.height=BASE_HEIGHT+"px";
+  root.style.left=left+"px";
+  root.style.top=top+"px";
+  root.style.right="auto";
+  root.style.bottom="auto";
+  root.style.margin="0";
+  root.style.transformOrigin="0 0";
+  root.style.transform=`scale(${s})`;
+  root.style.background="transparent";
 
-  // 작은 화면 cover scale 보정: 화면상 글자가 디자인 대비 ~0.92 이하로 줄지 않게
-  // 큰 화면(scale≥0.92)에서는 readability=1 유지
-  const readability=Math.min(1.22, Math.max(1, 0.92 / scale));
+  // 작은 화면: 글자 가독성만 (레이아웃/개별 scale 아님)
+  const readability=Math.min(1.22, Math.max(1, 0.92/s));
   const readabilityStr=readability.toFixed(4);
   root.style.setProperty("--readability-scale", readabilityStr);
   document.documentElement.style.setProperty("--readability-scale", readabilityStr);
 
-  // fit scale 변경 시 canvas 백킹 해상도 재동기화 (CSS transform blur 우회)
   syncBattleCanvasResolution();
 }
 
@@ -2848,6 +2909,10 @@ function initGameFitScale(){
   if(!GAME_FIT.resizeBound){
     GAME_FIT.resizeBound=true;
     window.addEventListener("resize", scheduleGameFitScale);
+    if(window.visualViewport){
+      window.visualViewport.addEventListener("resize", scheduleGameFitScale);
+      window.visualViewport.addEventListener("scroll", scheduleGameFitScale);
+    }
   }
 
   // HUD/배경 이미지 로드 후 높이 재측정
@@ -5520,6 +5585,9 @@ function ensureRaidBossVisual(){
 
     mountRaidBossHud(hud);
     raidBoss.hud=hud;
+    cacheRaidBossHudElements(hud);
+  }else if(!raidBoss.hudEls||raidBoss.hudEls.hud!==raidBoss.hud){
+    cacheRaidBossHudElements(raidBoss.hud);
   }
 
   mountRaidBossHud(raidBoss.hud);
@@ -5626,12 +5694,16 @@ function updateRaidBossStatusVisuals(now=nowGame()){
   if(!raidBoss || !raidBoss.body) return;
 
   // 후설모음 slow: 개별 boss visual 없음 (전역 Canvas wave cue + 실제 slowedUntil만)
-  raidBoss.body.classList.remove("raid-boss-slowed-visual");
+  // 레거시 class가 남아 있을 때만 1회 제거
+  if(raidBoss.body.classList.contains("raid-boss-slowed-visual")){
+    raidBoss.body.classList.remove("raid-boss-slowed-visual");
+  }
 
-  raidBoss.body.classList.toggle(
-    "raid-boss-frozen-visual",
-    raidBoss.frozenUntil > now
-  );
+  const frozen=raidBoss.frozenUntil>now;
+  if(raidBoss.uiFrozen!==frozen){
+    raidBoss.body.classList.toggle("raid-boss-frozen-visual",frozen);
+    raidBoss.uiFrozen=frozen;
+  }
 }
 
 function triggerRaidBossStatusBurst(type){
@@ -5656,67 +5728,78 @@ function triggerRaidBossStatusBurst(type){
 function updateRaidBossUI(now=nowGame()){
   if(!raidBoss||!raidBoss.hud)return;
 
-  const hpFill=raidBoss.hud.querySelector(".raid-hp-fill");
-  const hpTrail=raidBoss.hud.querySelector(".raid-hp-trail");
-  const hpText=raidBoss.hud.querySelector(".raid-hp-text");
-  const word=raidBoss.hud.querySelector(".raid-word");
-  const countdown=raidBoss.hud.querySelector(".raid-countdown");
-  const status=raidBoss.hud.querySelector(".raid-status");
+  const els=getRaidBossHudElements();
+  if(!els)return;
 
   const hpPct=Math.max(0,raidBoss.hp/raidBoss.maxHp*100);
+  const hpTextValue=`${Math.max(0,Math.ceil(raidBoss.hp))} / ${raidBoss.maxHp}`;
+  const wordValue=raidBoss.wordData?raidBoss.wordData.word:"";
+  const countdownSec=Math.ceil(Math.max(0,raidBoss.nextWordChangeAt-now)/1000);
+  const countdownValue=`단어 변경까지 ${countdownSec}초`;
 
-  if(hpFill){
-    hpFill.style.width=hpPct+"%";
+  const statuses=[];
+  if(raidBoss.frozenUntil>now)statuses.push("❄ 행동 정지");
+  if(raidBoss.slowedUntil>now)statuses.push("🐌 이동 둔화");
+  if(raidBoss.attackingPlant){
+    statuses.push("💢 진로 방해 식물 공격 중");
+
+    if(raidBoss.wallCount>0){
+      statuses.push(
+        `🧱 평순 방벽 ${raidBoss.wallCount}개 · 공격 간격 ${(raidBoss.currentBiteInterval/1000).toFixed(2)}초`
+      );
+    }
+  }
+  // 빈 문자열이면 :empty로 높이가 접히므로 nbsp로 슬롯 유지
+  const statusValue=statuses.length?statuses.join(" · "):"\u00A0";
+
+  const prev=raidBoss.uiState||{};
+
+  if(els.fill&&prev.hpPct!==hpPct){
+    els.fill.style.width=hpPct+"%";
   }
 
   // 현재 HP는 즉시 줄고, trail만 0.2초 늦게 따라옴 (매 프레임 transition 리셋 금지)
-  if(hpTrail){
+  if(els.trail){
     const prevHpPct=raidBoss.uiHpPct;
     if(prevHpPct===undefined){
-      hpTrail.style.transition="none";
-      hpTrail.style.width=hpPct+"%";
+      els.trail.style.transition="none";
+      els.trail.style.width=hpPct+"%";
     }else if(hpPct<prevHpPct){
-      hpTrail.style.transition="width 0.2s linear";
-      hpTrail.style.width=hpPct+"%";
+      els.trail.style.transition="width 0.2s linear";
+      els.trail.style.width=hpPct+"%";
     }else if(hpPct>prevHpPct){
-      hpTrail.style.transition="none";
-      hpTrail.style.width=hpPct+"%";
+      els.trail.style.transition="none";
+      els.trail.style.width=hpPct+"%";
     }
     raidBoss.uiHpPct=hpPct;
   }
 
-  if(hpText){
-    hpText.textContent=`${Math.max(0,Math.ceil(raidBoss.hp))} / ${raidBoss.maxHp}`;
+  if(els.text&&prev.hpText!==hpTextValue){
+    els.text.textContent=hpTextValue;
   }
 
-  if(word&&raidBoss.wordData){
-    word.textContent=raidBoss.wordData.word;
+  if(els.word&&wordValue&&prev.word!==wordValue){
+    els.word.textContent=wordValue;
   }
 
-  if(countdown){
-    const remaining=Math.max(0,raidBoss.nextWordChangeAt-now);
-    countdown.textContent=`단어 변경까지 ${Math.ceil(remaining/1000)}초`;
+  if(els.countdown&&prev.countdownSec!==countdownSec){
+    els.countdown.textContent=countdownValue;
   }
 
-  if(status){
-    const statuses=[];
-    if(raidBoss.frozenUntil>now)statuses.push("❄ 행동 정지");
-    if(raidBoss.slowedUntil>now)statuses.push("🐌 이동 둔화");
-    if(raidBoss.attackingPlant){
-      statuses.push("💢 진로 방해 식물 공격 중");
-
-      if(raidBoss.wallCount>0){
-        statuses.push(
-          `🧱 평순 방벽 ${raidBoss.wallCount}개 · 공격 간격 ${(raidBoss.currentBiteInterval/1000).toFixed(2)}초`
-        );
-      }
-    }
-    // 빈 문자열이면 :empty로 높이가 접히므로 nbsp로 슬롯 유지
-    status.textContent=statuses.length?statuses.join(" · "):"\u00A0";
+  if(els.status&&prev.statusText!==statusValue){
+    els.status.textContent=statusValue;
   }
+
+  raidBoss.uiState={
+    hpPct,
+    hpText:hpTextValue,
+    word:wordValue,
+    countdownSec,
+    statusText:statusValue
+  };
 
   updateRaidBossStatusVisuals(now);
-  updateRaidBossBodyPosition();
+  // body position은 updateRaidBossMovement / ensureRaidBossVisual 전담
 }
 
 function changeRaidBossWord(now=nowGame()){
@@ -5811,7 +5894,7 @@ function showBossWordWarning(){
 }
 
 function playBossWordSwitchEffect(){
-  const word=raidBoss?.hud?.querySelector(".raid-word");
+  const word=getRaidBossHudElements()?.word||raidBoss?.hud?.querySelector(".raid-word");
   if(word){
     word.classList.remove("raid-word-switch-pulse");
     void word.offsetWidth;
@@ -5880,7 +5963,7 @@ function damageRaidBoss(damage,extraClass=""){
   // floating number 비활성(createRaidDamageNumber stub) — HP/점수/판정은 아래에서 그대로 진행
   createRaidDamageNumber(damage,extraClass);
   raidBoss.hp-=damage;
-  updateRaidBossUI();
+  // HUD는 gameLoop의 updateRaidBossUI가 값 변경 시에만 반영 (피격마다 전체 UI 재호출 금지)
   if(raidBoss.hp<=0){
     finishRaid();
     return true;
@@ -6883,11 +6966,13 @@ function startRaid(){
     dotTickInterval:0,
     dotDamage:0,
 
-    hud:null,body:null,lastBiteTime:0,attackingPlant:false,
+    hud:null,body:null,hudEls:null,uiState:null,
+    lastBiteTime:0,attackingPlant:false,
     wallCount:0,currentBiteInterval:RAID_CONFIG.biteInterval,
     hitVisualCooldownUntil:0,hitVisualTimer:null,
     hitImpactCooldownUntil:0,hitImpactHeavyCooldownUntil:0,
     uiHpPct:undefined,
+    uiFrozen:undefined,
     wordWarnForChangeAt:null,
     entering:true,
     entranceTimer:null,

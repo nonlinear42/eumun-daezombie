@@ -1,0 +1,39 @@
+﻿[
+    {
+        "description":  "",
+        "devtoolsFrontendUrl":  "https://chrome-devtools-frontend.appspot.com/serve_rev/@0d89dfa2dd7c1ec4b8a14b9f303f887bb63b6174/inspector.html?ws=127.0.0.1:9222/devtools/page/F2C005DCD42B809FB9679F5BF2D19857",
+        "faviconUrl":  "file:///C:/Users/nonli/OneDrive/%EB%B0%94%ED%83%95%20%ED%99%94%EB%A9%B4/phoneme-defense/eumun-daezombie/images/favicon.png",
+        "id":  "F2C005DCD42B809FB9679F5BF2D19857",
+        "title":  "음운대좀비",
+        "type":  "page",
+        "url":  "file:///C:/Users/nonli/OneDrive/%EB%B0%94%ED%83%95%20%ED%99%94%EB%A9%B4/phoneme-defense/eumun-daezombie/index.html",
+        "webSocketDebuggerUrl":  "ws://127.0.0.1:9222/devtools/page/F2C005DCD42B809FB9679F5BF2D19857"
+    },
+    {
+        "description":  "",
+        "devtoolsFrontendUrl":  "https://chrome-devtools-frontend.appspot.com/serve_rev/@0d89dfa2dd7c1ec4b8a14b9f303f887bb63b6174/inspector.html?ws=127.0.0.1:9222/devtools/page/6DEA80F54C83137C3CC5D91D85612AC5",
+        "id":  "6DEA80F54C83137C3CC5D91D85612AC5",
+        "title":  "about:blank",
+        "type":  "page",
+        "url":  "about:blank",
+        "webSocketDebuggerUrl":  "ws://127.0.0.1:9222/devtools/page/6DEA80F54C83137C3CC5D91D85612AC5"
+    },
+    {
+        "description":  "",
+        "devtoolsFrontendUrl":  "https://chrome-devtools-frontend.appspot.com/serve_rev/@0d89dfa2dd7c1ec4b8a14b9f303f887bb63b6174/inspector.html?ws=127.0.0.1:9222/devtools/page/F28C5F9B23042F15CE0EB5CD4D9200A8",
+        "id":  "F28C5F9B23042F15CE0EB5CD4D9200A8",
+        "title":  "Omnibox Popup",
+        "type":  "browser_ui",
+        "url":  "chrome://omnibox-popup.top-chrome/",
+        "webSocketDebuggerUrl":  "ws://127.0.0.1:9222/devtools/page/F28C5F9B23042F15CE0EB5CD4D9200A8"
+    },
+    {
+        "description":  "",
+        "devtoolsFrontendUrl":  "https://chrome-devtools-frontend.appspot.com/serve_rev/@0d89dfa2dd7c1ec4b8a14b9f303f887bb63b6174/inspector.html?ws=127.0.0.1:9222/devtools/page/A20BD4599E0CA659CDEC61E016E9787C",
+        "id":  "A20BD4599E0CA659CDEC61E016E9787C",
+        "title":  "Omnibox Popup",
+        "type":  "browser_ui",
+        "url":  "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html",
+        "webSocketDebuggerUrl":  "ws://127.0.0.1:9222/devtools/page/A20BD4599E0CA659CDEC61E016E9787C"
+    }
+]

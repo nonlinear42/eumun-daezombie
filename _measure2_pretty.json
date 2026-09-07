@@ -1,0 +1,1274 @@
+﻿{
+    "viewport":  {
+                     "w":  1920,
+                     "h":  1080
+                 },
+    "scale":  1.14772,
+    "expectedScale":  1.147715,
+    "root":  {
+                 "offsetW":  1672,
+                 "offsetH":  941,
+                 "scrollW":  1923,
+                 "scrollH":  1082,
+                 "transform":  "matrix(1.14772, 0, 0, 1.14772, 0, 0)",
+                 "transformOrigin":  "0px 0px",
+                 "overflow":  "hidden",
+                 "left":  "0.510096px",
+                 "top":  "0px",
+                 "rect":  {
+                              "x":  0.5,
+                              "y":  0,
+                              "w":  1918.98,
+                              "h":  1080,
+                              "bottom":  1080
+                          },
+                 "expectedScaled":  {
+                                        "w":  1918.99,
+                                        "h":  1080
+                                    }
+             },
+    "shell":  {
+                  "name":  "shell",
+                  "offsetW":  1920,
+                  "offsetH":  1080,
+                  "cssTop":  "0px",
+                  "cssLeft":  "0px",
+                  "cssPos":  "fixed",
+                  "cssTransform":  "none",
+                  "inRoot":  false,
+                  "rect":  {
+                               "x":  0,
+                               "y":  0,
+                               "w":  1920,
+                               "h":  1080,
+                               "right":  1920,
+                               "bottom":  1080
+                           },
+                  "designFromRect":  {
+                                         "x":  -0.44,
+                                         "y":  0,
+                                         "w":  1672.88,
+                                         "h":  941,
+                                         "bottom":  941
+                                     },
+                  "overflowViewportPx":  {
+                                             "right":  0,
+                                             "bottom":  0,
+                                             "left":  0,
+                                             "top":  0
+                                         },
+                  "overflowRootVisualPx":  {
+                                               "right":  0.52,
+                                               "bottom":  0
+                                           },
+                  "ancestors":  [
+                                    {
+                                        "tag":  "DIV",
+                                        "id":  "game-viewport-shell",
+                                        "cls":  "",
+                                        "pos":  "fixed",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "hidden",
+                                        "top":  "0px",
+                                        "left":  "0px",
+                                        "width":  "1920px",
+                                        "height":  "1080px",
+                                        "offsetW":  1920,
+                                        "offsetH":  1080,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  null,
+                                        "rect":  {
+                                                     "x":  0,
+                                                     "y":  0,
+                                                     "w":  1920,
+                                                     "h":  1080,
+                                                     "b":  1080
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "BODY",
+                                        "id":  "",
+                                        "cls":  "",
+                                        "pos":  "relative",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "hidden",
+                                        "top":  "0px",
+                                        "left":  "0px",
+                                        "width":  "1920px",
+                                        "height":  "1080px",
+                                        "offsetW":  1920,
+                                        "offsetH":  1080,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  null,
+                                        "rect":  {
+                                                     "x":  0,
+                                                     "y":  0,
+                                                     "w":  1920,
+                                                     "h":  1080,
+                                                     "b":  1080
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "HTML",
+                                        "id":  "",
+                                        "cls":  "",
+                                        "pos":  "static",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "hidden",
+                                        "top":  "auto",
+                                        "left":  "auto",
+                                        "width":  "1920px",
+                                        "height":  "1080px",
+                                        "offsetW":  1920,
+                                        "offsetH":  1080,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  null,
+                                        "rect":  {
+                                                     "x":  0,
+                                                     "y":  0,
+                                                     "w":  1920,
+                                                     "h":  1080,
+                                                     "b":  1080
+                                                 }
+                                    }
+                                ]
+              },
+    "board":  {
+                  "name":  "board",
+                  "offsetW":  990,
+                  "offsetH":  450,
+                  "cssTop":  "459.986px",
+                  "cssLeft":  "288.995px",
+                  "cssPos":  "absolute",
+                  "cssTransform":  "none",
+                  "inRoot":  true,
+                  "rect":  {
+                               "x":  381.94,
+                               "y":  607.12,
+                               "w":  1306.67,
+                               "h":  593.94,
+                               "right":  1688.61,
+                               "bottom":  1201.07
+                           },
+                  "designFromRect":  {
+                                         "x":  332.34,
+                                         "y":  528.98,
+                                         "w":  1138.5,
+                                         "h":  517.5,
+                                         "bottom":  1046.48
+                                     },
+                  "overflowViewportPx":  {
+                                             "right":  0,
+                                             "bottom":  121.07,
+                                             "left":  0,
+                                             "top":  0
+                                         },
+                  "overflowRootVisualPx":  {
+                                               "right":  0,
+                                               "bottom":  121.07
+                                           },
+                  "ancestors":  [
+                                    {
+                                        "tag":  "DIV",
+                                        "id":  "",
+                                        "cls":  "game-board-viewport",
+                                        "pos":  "absolute",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "visible",
+                                        "top":  "459.986px",
+                                        "left":  "288.995px",
+                                        "width":  "990px",
+                                        "height":  "450px",
+                                        "offsetW":  990,
+                                        "offsetH":  450,
+                                        "offsetTop":  460,
+                                        "offsetLeft":  289,
+                                        "offsetParent":  ".battle-scene",
+                                        "rect":  {
+                                                     "x":  381.94,
+                                                     "y":  607.12,
+                                                     "w":  1306.67,
+                                                     "h":  593.94,
+                                                     "b":  1201.07
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "DIV",
+                                        "id":  "",
+                                        "cls":  "battle-scene",
+                                        "pos":  "absolute",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "visible",
+                                        "top":  "0px",
+                                        "left":  "0px",
+                                        "width":  "1672px",
+                                        "height":  "940.992px",
+                                        "offsetW":  1672,
+                                        "offsetH":  941,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  ".battle-center",
+                                        "rect":  {
+                                                     "x":  0.5,
+                                                     "y":  0,
+                                                     "w":  2206.82,
+                                                     "h":  1241.99,
+                                                     "b":  1241.99
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "MAIN",
+                                        "id":  "",
+                                        "cls":  "battle-center",
+                                        "pos":  "absolute",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "visible",
+                                        "top":  "0px",
+                                        "left":  "0px",
+                                        "width":  "1672px",
+                                        "height":  "940.992px",
+                                        "offsetW":  1672,
+                                        "offsetH":  941,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  ".battle-main",
+                                        "rect":  {
+                                                     "x":  0.5,
+                                                     "y":  0,
+                                                     "w":  2206.82,
+                                                     "h":  1241.99,
+                                                     "b":  1241.99
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "DIV",
+                                        "id":  "",
+                                        "cls":  "battle-main",
+                                        "pos":  "absolute",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "visible",
+                                        "top":  "0px",
+                                        "left":  "0px",
+                                        "width":  "1672px",
+                                        "height":  "940.992px",
+                                        "offsetW":  1672,
+                                        "offsetH":  941,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  ".battle-layout",
+                                        "rect":  {
+                                                     "x":  0.5,
+                                                     "y":  0,
+                                                     "w":  2206.82,
+                                                     "h":  1241.99,
+                                                     "b":  1241.99
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "DIV",
+                                        "id":  "",
+                                        "cls":  "battle-layout",
+                                        "pos":  "absolute",
+                                        "transform":  "none",
+                                        "zoom":  "1.15",
+                                        "filter":  "none",
+                                        "overflow":  "visible",
+                                        "top":  "0px",
+                                        "left":  "0px",
+                                        "width":  "1672px",
+                                        "height":  "940.992px",
+                                        "offsetW":  1672,
+                                        "offsetH":  941,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  "game-scale-root.",
+                                        "rect":  {
+                                                     "x":  0.5,
+                                                     "y":  0,
+                                                     "w":  2206.82,
+                                                     "h":  1241.99,
+                                                     "b":  1241.99
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "DIV",
+                                        "id":  "game-scale-root",
+                                        "cls":  "",
+                                        "pos":  "absolute",
+                                        "transform":  "matrix(1.14772, 0, 0, 1.14772, 0, 0)",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "hidden",
+                                        "top":  "0px",
+                                        "left":  "0.510096px",
+                                        "width":  "1672px",
+                                        "height":  "941px",
+                                        "offsetW":  1672,
+                                        "offsetH":  941,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  1,
+                                        "offsetParent":  "game-viewport-shell.",
+                                        "rect":  {
+                                                     "x":  0.5,
+                                                     "y":  0,
+                                                     "w":  1918.98,
+                                                     "h":  1080,
+                                                     "b":  1080
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "DIV",
+                                        "id":  "game-viewport-shell",
+                                        "cls":  "",
+                                        "pos":  "fixed",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "hidden",
+                                        "top":  "0px",
+                                        "left":  "0px",
+                                        "width":  "1920px",
+                                        "height":  "1080px",
+                                        "offsetW":  1920,
+                                        "offsetH":  1080,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  null,
+                                        "rect":  {
+                                                     "x":  0,
+                                                     "y":  0,
+                                                     "w":  1920,
+                                                     "h":  1080,
+                                                     "b":  1080
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "BODY",
+                                        "id":  "",
+                                        "cls":  "",
+                                        "pos":  "relative",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "hidden",
+                                        "top":  "0px",
+                                        "left":  "0px",
+                                        "width":  "1920px",
+                                        "height":  "1080px",
+                                        "offsetW":  1920,
+                                        "offsetH":  1080,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  null,
+                                        "rect":  {
+                                                     "x":  0,
+                                                     "y":  0,
+                                                     "w":  1920,
+                                                     "h":  1080,
+                                                     "b":  1080
+                                                 }
+                                    },
+                                    {
+                                        "tag":  "HTML",
+                                        "id":  "",
+                                        "cls":  "",
+                                        "pos":  "static",
+                                        "transform":  "none",
+                                        "zoom":  "1",
+                                        "filter":  "none",
+                                        "overflow":  "hidden",
+                                        "top":  "auto",
+                                        "left":  "auto",
+                                        "width":  "1920px",
+                                        "height":  "1080px",
+                                        "offsetW":  1920,
+                                        "offsetH":  1080,
+                                        "offsetTop":  0,
+                                        "offsetLeft":  0,
+                                        "offsetParent":  null,
+                                        "rect":  {
+                                                     "x":  0,
+                                                     "y":  0,
+                                                     "w":  1920,
+                                                     "h":  1080,
+                                                     "b":  1080
+                                                 }
+                                    }
+                                ]
+              },
+    "sidebar":  {
+                    "name":  "sidebar",
+                    "offsetW":  258,
+                    "offsetH":  767,
+                    "cssTop":  "96px",
+                    "cssLeft":  "6px",
+                    "cssPos":  "absolute",
+                    "cssTransform":  "none",
+                    "inRoot":  true,
+                    "rect":  {
+                                 "x":  8.41,
+                                 "y":  126.7,
+                                 "w":  340.51,
+                                 "h":  1012.34,
+                                 "right":  348.92,
+                                 "bottom":  1139.04
+                             },
+                    "designFromRect":  {
+                                           "x":  6.89,
+                                           "y":  110.39,
+                                           "w":  296.69,
+                                           "h":  882.04,
+                                           "bottom":  992.43
+                                       },
+                    "overflowViewportPx":  {
+                                               "right":  0,
+                                               "bottom":  59.04,
+                                               "left":  0,
+                                               "top":  0
+                                           },
+                    "overflowRootVisualPx":  {
+                                                 "right":  0,
+                                                 "bottom":  59.04
+                                             },
+                    "ancestors":  [
+                                      {
+                                          "tag":  "ASIDE",
+                                          "id":  "",
+                                          "cls":  "battle-sidebar battle-sidebar-left sidebar-accordion",
+                                          "pos":  "absolute",
+                                          "transform":  "none",
+                                          "zoom":  "1",
+                                          "filter":  "none",
+                                          "overflow":  "hidden",
+                                          "top":  "96px",
+                                          "left":  "6px",
+                                          "width":  "257.989px",
+                                          "height":  "766.997px",
+                                          "offsetW":  258,
+                                          "offsetH":  767,
+                                          "offsetTop":  96,
+                                          "offsetLeft":  6,
+                                          "offsetParent":  ".battle-layout",
+                                          "rect":  {
+                                                       "x":  8.41,
+                                                       "y":  126.7,
+                                                       "w":  340.51,
+                                                       "h":  1012.34,
+                                                       "b":  1139.04
+                                                   }
+                                      },
+                                      {
+                                          "tag":  "DIV",
+                                          "id":  "",
+                                          "cls":  "battle-layout",
+                                          "pos":  "absolute",
+                                          "transform":  "none",
+                                          "zoom":  "1.15",
+                                          "filter":  "none",
+                                          "overflow":  "visible",
+                                          "top":  "0px",
+                                          "left":  "0px",
+                                          "width":  "1672px",
+                                          "height":  "940.992px",
+                                          "offsetW":  1672,
+                                          "offsetH":  941,
+                                          "offsetTop":  0,
+                                          "offsetLeft":  0,
+                                          "offsetParent":  "game-scale-root.",
+                                          "rect":  {
+                                                       "x":  0.5,
+                                                       "y":  0,
+                                                       "w":  2206.82,
+                                                       "h":  1241.99,
+                                                       "b":  1241.99
+                                                   }
+                                      },
+                                      {
+                                          "tag":  "DIV",
+                                          "id":  "game-scale-root",
+                                          "cls":  "",
+                                          "pos":  "absolute",
+                                          "transform":  "matrix(1.14772, 0, 0, 1.14772, 0, 0)",
+                                          "zoom":  "1",
+                                          "filter":  "none",
+                                          "overflow":  "hidden",
+                                          "top":  "0px",
+                                          "left":  "0.510096px",
+                                          "width":  "1672px",
+                                          "height":  "941px",
+                                          "offsetW":  1672,
+                                          "offsetH":  941,
+                                          "offsetTop":  0,
+                                          "offsetLeft":  1,
+                                          "offsetParent":  "game-viewport-shell.",
+                                          "rect":  {
+                                                       "x":  0.5,
+                                                       "y":  0,
+                                                       "w":  1918.98,
+                                                       "h":  1080,
+                                                       "b":  1080
+                                                   }
+                                      },
+                                      {
+                                          "tag":  "DIV",
+                                          "id":  "game-viewport-shell",
+                                          "cls":  "",
+                                          "pos":  "fixed",
+                                          "transform":  "none",
+                                          "zoom":  "1",
+                                          "filter":  "none",
+                                          "overflow":  "hidden",
+                                          "top":  "0px",
+                                          "left":  "0px",
+                                          "width":  "1920px",
+                                          "height":  "1080px",
+                                          "offsetW":  1920,
+                                          "offsetH":  1080,
+                                          "offsetTop":  0,
+                                          "offsetLeft":  0,
+                                          "offsetParent":  null,
+                                          "rect":  {
+                                                       "x":  0,
+                                                       "y":  0,
+                                                       "w":  1920,
+                                                       "h":  1080,
+                                                       "b":  1080
+                                                   }
+                                      },
+                                      {
+                                          "tag":  "BODY",
+                                          "id":  "",
+                                          "cls":  "",
+                                          "pos":  "relative",
+                                          "transform":  "none",
+                                          "zoom":  "1",
+                                          "filter":  "none",
+                                          "overflow":  "hidden",
+                                          "top":  "0px",
+                                          "left":  "0px",
+                                          "width":  "1920px",
+                                          "height":  "1080px",
+                                          "offsetW":  1920,
+                                          "offsetH":  1080,
+                                          "offsetTop":  0,
+                                          "offsetLeft":  0,
+                                          "offsetParent":  null,
+                                          "rect":  {
+                                                       "x":  0,
+                                                       "y":  0,
+                                                       "w":  1920,
+                                                       "h":  1080,
+                                                       "b":  1080
+                                                   }
+                                      },
+                                      {
+                                          "tag":  "HTML",
+                                          "id":  "",
+                                          "cls":  "",
+                                          "pos":  "static",
+                                          "transform":  "none",
+                                          "zoom":  "1",
+                                          "filter":  "none",
+                                          "overflow":  "hidden",
+                                          "top":  "auto",
+                                          "left":  "auto",
+                                          "width":  "1920px",
+                                          "height":  "1080px",
+                                          "offsetW":  1920,
+                                          "offsetH":  1080,
+                                          "offsetTop":  0,
+                                          "offsetLeft":  0,
+                                          "offsetParent":  null,
+                                          "rect":  {
+                                                       "x":  0,
+                                                       "y":  0,
+                                                       "w":  1920,
+                                                       "h":  1080,
+                                                       "b":  1080
+                                                   }
+                                      }
+                                  ]
+                },
+    "remove":  {
+                   "name":  "remove",
+                   "offsetW":  244,
+                   "offsetH":  122,
+                   "cssTop":  "0px",
+                   "cssLeft":  "0px",
+                   "cssPos":  "relative",
+                   "cssTransform":  "none",
+                   "inRoot":  true,
+                   "rect":  {
+                                "x":  17.46,
+                                "y":  970.09,
+                                "w":  322.4,
+                                "h":  161.2,
+                                "right":  339.87,
+                                "bottom":  1131.29
+                            },
+                   "designFromRect":  {
+                                          "x":  14.78,
+                                          "y":  845.23,
+                                          "w":  280.91,
+                                          "h":  140.45,
+                                          "bottom":  985.68
+                                      },
+                   "overflowViewportPx":  {
+                                              "right":  0,
+                                              "bottom":  51.29,
+                                              "left":  0,
+                                              "top":  0
+                                          },
+                   "overflowRootVisualPx":  {
+                                                "right":  0,
+                                                "bottom":  51.29
+                                            },
+                   "ancestors":  [
+                                     {
+                                         "tag":  "BUTTON",
+                                         "id":  "remove-button",
+                                         "cls":  "",
+                                         "pos":  "relative",
+                                         "transform":  "none",
+                                         "zoom":  "1",
+                                         "filter":  "none",
+                                         "overflow":  "visible",
+                                         "top":  "0px",
+                                         "left":  "0px",
+                                         "width":  "244.266px",
+                                         "height":  "122.133px",
+                                         "offsetW":  244,
+                                         "offsetH":  122,
+                                         "offsetTop":  638,
+                                         "offsetLeft":  6,
+                                         "offsetParent":  ".battle-sidebar",
+                                         "rect":  {
+                                                      "x":  17.46,
+                                                      "y":  970.09,
+                                                      "w":  322.4,
+                                                      "h":  161.2,
+                                                      "b":  1131.29
+                                                  }
+                                     },
+                                     {
+                                         "tag":  "DIV",
+                                         "id":  "",
+                                         "cls":  "sidebar-remove-wrap",
+                                         "pos":  "static",
+                                         "transform":  "none",
+                                         "zoom":  "1",
+                                         "filter":  "none",
+                                         "overflow":  "visible",
+                                         "top":  "auto",
+                                         "left":  "auto",
+                                         "width":  "246.25px",
+                                         "height":  "122.133px",
+                                         "offsetW":  246,
+                                         "offsetH":  122,
+                                         "offsetTop":  638,
+                                         "offsetLeft":  5,
+                                         "offsetParent":  ".battle-sidebar",
+                                         "rect":  {
+                                                      "x":  16.16,
+                                                      "y":  970.09,
+                                                      "w":  325.02,
+                                                      "h":  161.2,
+                                                      "b":  1131.29
+                                                  }
+                                     },
+                                     {
+                                         "tag":  "ASIDE",
+                                         "id":  "",
+                                         "cls":  "battle-sidebar battle-sidebar-left sidebar-accordion",
+                                         "pos":  "absolute",
+                                         "transform":  "none",
+                                         "zoom":  "1",
+                                         "filter":  "none",
+                                         "overflow":  "hidden",
+                                         "top":  "96px",
+                                         "left":  "6px",
+                                         "width":  "257.989px",
+                                         "height":  "766.997px",
+                                         "offsetW":  258,
+                                         "offsetH":  767,
+                                         "offsetTop":  96,
+                                         "offsetLeft":  6,
+                                         "offsetParent":  ".battle-layout",
+                                         "rect":  {
+                                                      "x":  8.41,
+                                                      "y":  126.7,
+                                                      "w":  340.51,
+                                                      "h":  1012.34,
+                                                      "b":  1139.04
+                                                  }
+                                     },
+                                     {
+                                         "tag":  "DIV",
+                                         "id":  "",
+                                         "cls":  "battle-layout",
+                                         "pos":  "absolute",
+                                         "transform":  "none",
+                                         "zoom":  "1.15",
+                                         "filter":  "none",
+                                         "overflow":  "visible",
+                                         "top":  "0px",
+                                         "left":  "0px",
+                                         "width":  "1672px",
+                                         "height":  "940.992px",
+                                         "offsetW":  1672,
+                                         "offsetH":  941,
+                                         "offsetTop":  0,
+                                         "offsetLeft":  0,
+                                         "offsetParent":  "game-scale-root.",
+                                         "rect":  {
+                                                      "x":  0.5,
+                                                      "y":  0,
+                                                      "w":  2206.82,
+                                                      "h":  1241.99,
+                                                      "b":  1241.99
+                                                  }
+                                     },
+                                     {
+                                         "tag":  "DIV",
+                                         "id":  "game-scale-root",
+                                         "cls":  "",
+                                         "pos":  "absolute",
+                                         "transform":  "matrix(1.14772, 0, 0, 1.14772, 0, 0)",
+                                         "zoom":  "1",
+                                         "filter":  "none",
+                                         "overflow":  "hidden",
+                                         "top":  "0px",
+                                         "left":  "0.510096px",
+                                         "width":  "1672px",
+                                         "height":  "941px",
+                                         "offsetW":  1672,
+                                         "offsetH":  941,
+                                         "offsetTop":  0,
+                                         "offsetLeft":  1,
+                                         "offsetParent":  "game-viewport-shell.",
+                                         "rect":  {
+                                                      "x":  0.5,
+                                                      "y":  0,
+                                                      "w":  1918.98,
+                                                      "h":  1080,
+                                                      "b":  1080
+                                                  }
+                                     },
+                                     {
+                                         "tag":  "DIV",
+                                         "id":  "game-viewport-shell",
+                                         "cls":  "",
+                                         "pos":  "fixed",
+                                         "transform":  "none",
+                                         "zoom":  "1",
+                                         "filter":  "none",
+                                         "overflow":  "hidden",
+                                         "top":  "0px",
+                                         "left":  "0px",
+                                         "width":  "1920px",
+                                         "height":  "1080px",
+                                         "offsetW":  1920,
+                                         "offsetH":  1080,
+                                         "offsetTop":  0,
+                                         "offsetLeft":  0,
+                                         "offsetParent":  null,
+                                         "rect":  {
+                                                      "x":  0,
+                                                      "y":  0,
+                                                      "w":  1920,
+                                                      "h":  1080,
+                                                      "b":  1080
+                                                  }
+                                     },
+                                     {
+                                         "tag":  "BODY",
+                                         "id":  "",
+                                         "cls":  "",
+                                         "pos":  "relative",
+                                         "transform":  "none",
+                                         "zoom":  "1",
+                                         "filter":  "none",
+                                         "overflow":  "hidden",
+                                         "top":  "0px",
+                                         "left":  "0px",
+                                         "width":  "1920px",
+                                         "height":  "1080px",
+                                         "offsetW":  1920,
+                                         "offsetH":  1080,
+                                         "offsetTop":  0,
+                                         "offsetLeft":  0,
+                                         "offsetParent":  null,
+                                         "rect":  {
+                                                      "x":  0,
+                                                      "y":  0,
+                                                      "w":  1920,
+                                                      "h":  1080,
+                                                      "b":  1080
+                                                  }
+                                     },
+                                     {
+                                         "tag":  "HTML",
+                                         "id":  "",
+                                         "cls":  "",
+                                         "pos":  "static",
+                                         "transform":  "none",
+                                         "zoom":  "1",
+                                         "filter":  "none",
+                                         "overflow":  "hidden",
+                                         "top":  "auto",
+                                         "left":  "auto",
+                                         "width":  "1920px",
+                                         "height":  "1080px",
+                                         "offsetW":  1920,
+                                         "offsetH":  1080,
+                                         "offsetTop":  0,
+                                         "offsetLeft":  0,
+                                         "offsetParent":  null,
+                                         "rect":  {
+                                                      "x":  0,
+                                                      "y":  0,
+                                                      "w":  1920,
+                                                      "h":  1080,
+                                                      "b":  1080
+                                                  }
+                                     }
+                                 ]
+               },
+    "hud":  {
+                "name":  "hud",
+                "offsetW":  920,
+                "offsetH":  88,
+                "cssTop":  "14px",
+                "cssLeft":  "836px",
+                "cssPos":  "absolute",
+                "cssTransform":  "matrix(1, 0, 0, 1, -460, 0)",
+                "inRoot":  true,
+                "rect":  {
+                             "x":  432.04,
+                             "y":  16.07,
+                             "w":  1055.9,
+                             "h":  100.69,
+                             "right":  1487.94,
+                             "bottom":  116.76
+                         },
+                "designFromRect":  {
+                                       "x":  376,
+                                       "y":  14,
+                                       "w":  920,
+                                       "h":  87.73,
+                                       "bottom":  101.73
+                                   },
+                "overflowViewportPx":  {
+                                           "right":  0,
+                                           "bottom":  0,
+                                           "left":  0,
+                                           "top":  0
+                                       },
+                "overflowRootVisualPx":  {
+                                             "right":  0,
+                                             "bottom":  0
+                                         },
+                "ancestors":  [
+                                  {
+                                      "tag":  "DIV",
+                                      "id":  "",
+                                      "cls":  "status-bar",
+                                      "pos":  "absolute",
+                                      "transform":  "matrix(1, 0, 0, 1, -460, 0)",
+                                      "zoom":  "1",
+                                      "filter":  "drop-shadow(rgba(0, 0, 0, 0.28) 0px 2px 6px)",
+                                      "overflow":  "visible",
+                                      "top":  "14px",
+                                      "left":  "836px",
+                                      "width":  "920px",
+                                      "height":  "87.7344px",
+                                      "offsetW":  920,
+                                      "offsetH":  88,
+                                      "offsetTop":  14,
+                                      "offsetLeft":  836,
+                                      "offsetParent":  "game-scale-root.",
+                                      "rect":  {
+                                                   "x":  432.04,
+                                                   "y":  16.07,
+                                                   "w":  1055.9,
+                                                   "h":  100.69,
+                                                   "b":  116.76
+                                               }
+                                  },
+                                  {
+                                      "tag":  "DIV",
+                                      "id":  "game-scale-root",
+                                      "cls":  "",
+                                      "pos":  "absolute",
+                                      "transform":  "matrix(1.14772, 0, 0, 1.14772, 0, 0)",
+                                      "zoom":  "1",
+                                      "filter":  "none",
+                                      "overflow":  "hidden",
+                                      "top":  "0px",
+                                      "left":  "0.510096px",
+                                      "width":  "1672px",
+                                      "height":  "941px",
+                                      "offsetW":  1672,
+                                      "offsetH":  941,
+                                      "offsetTop":  0,
+                                      "offsetLeft":  1,
+                                      "offsetParent":  "game-viewport-shell.",
+                                      "rect":  {
+                                                   "x":  0.5,
+                                                   "y":  0,
+                                                   "w":  1918.98,
+                                                   "h":  1080,
+                                                   "b":  1080
+                                               }
+                                  },
+                                  {
+                                      "tag":  "DIV",
+                                      "id":  "game-viewport-shell",
+                                      "cls":  "",
+                                      "pos":  "fixed",
+                                      "transform":  "none",
+                                      "zoom":  "1",
+                                      "filter":  "none",
+                                      "overflow":  "hidden",
+                                      "top":  "0px",
+                                      "left":  "0px",
+                                      "width":  "1920px",
+                                      "height":  "1080px",
+                                      "offsetW":  1920,
+                                      "offsetH":  1080,
+                                      "offsetTop":  0,
+                                      "offsetLeft":  0,
+                                      "offsetParent":  null,
+                                      "rect":  {
+                                                   "x":  0,
+                                                   "y":  0,
+                                                   "w":  1920,
+                                                   "h":  1080,
+                                                   "b":  1080
+                                               }
+                                  },
+                                  {
+                                      "tag":  "BODY",
+                                      "id":  "",
+                                      "cls":  "",
+                                      "pos":  "relative",
+                                      "transform":  "none",
+                                      "zoom":  "1",
+                                      "filter":  "none",
+                                      "overflow":  "hidden",
+                                      "top":  "0px",
+                                      "left":  "0px",
+                                      "width":  "1920px",
+                                      "height":  "1080px",
+                                      "offsetW":  1920,
+                                      "offsetH":  1080,
+                                      "offsetTop":  0,
+                                      "offsetLeft":  0,
+                                      "offsetParent":  null,
+                                      "rect":  {
+                                                   "x":  0,
+                                                   "y":  0,
+                                                   "w":  1920,
+                                                   "h":  1080,
+                                                   "b":  1080
+                                               }
+                                  },
+                                  {
+                                      "tag":  "HTML",
+                                      "id":  "",
+                                      "cls":  "",
+                                      "pos":  "static",
+                                      "transform":  "none",
+                                      "zoom":  "1",
+                                      "filter":  "none",
+                                      "overflow":  "hidden",
+                                      "top":  "auto",
+                                      "left":  "auto",
+                                      "width":  "1920px",
+                                      "height":  "1080px",
+                                      "offsetW":  1920,
+                                      "offsetH":  1080,
+                                      "offsetTop":  0,
+                                      "offsetLeft":  0,
+                                      "offsetParent":  null,
+                                      "rect":  {
+                                                   "x":  0,
+                                                   "y":  0,
+                                                   "w":  1920,
+                                                   "h":  1080,
+                                                   "b":  1080
+                                               }
+                                  }
+                              ]
+            },
+    "spillTop30":  [
+                       {
+                           "id":  "",
+                           "cls":  "battle-layout",
+                           "bottomDesign":  1082.1,
+                           "rightDesign":  1922.8,
+                           "pastBottom":  141.1,
+                           "pastRight":  250.8
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "battle-sidebar battle-sidebar-left sidebar-accordion",
+                           "bottomDesign":  992.4,
+                           "rightDesign":  303.6,
+                           "pastBottom":  51.4,
+                           "pastRight":  -1368.4
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "sidebar-remove-wrap",
+                           "bottomDesign":  985.7,
+                           "rightDesign":  296.8,
+                           "pastBottom":  44.7,
+                           "pastRight":  -1375.2
+                       },
+                       {
+                           "id":  "remove-button",
+                           "cls":  "",
+                           "bottomDesign":  985.7,
+                           "rightDesign":  295.7,
+                           "pastBottom":  44.7,
+                           "pastRight":  -1376.3
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "plant-cost-label remove-refund-label",
+                           "bottomDesign":  959,
+                           "rightDesign":  270.4,
+                           "pastBottom":  18,
+                           "pastRight":  -1401.6
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "plant-cost-text",
+                           "bottomDesign":  949.9,
+                           "rightDesign":  250.6,
+                           "pastBottom":  8.9,
+                           "pastRight":  -1421.4
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "battle-main",
+                           "bottomDesign":  1082.1,
+                           "rightDesign":  1922.8,
+                           "pastBottom":  141.1,
+                           "pastRight":  250.8
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "battle-center",
+                           "bottomDesign":  1082.1,
+                           "rightDesign":  1922.8,
+                           "pastBottom":  141.1,
+                           "pastRight":  250.8
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "battle-scene",
+                           "bottomDesign":  1082.1,
+                           "rightDesign":  1922.8,
+                           "pastBottom":  141.1,
+                           "pastRight":  250.8
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "playfield-lane-overlay",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  1470.8,
+                           "pastBottom":  105.5,
+                           "pastRight":  -201.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "game-board-viewport",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  1470.8,
+                           "pastBottom":  105.5,
+                           "pastRight":  -201.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "game-board",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  1470.8,
+                           "pastBottom":  105.5,
+                           "pastRight":  -201.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "playfield-start-markers",
+                           "bottomDesign":  1025.5,
+                           "rightDesign":  1470.8,
+                           "pastBottom":  84.5,
+                           "pastRight":  -201.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "playfield-start-marker",
+                           "bottomDesign":  1000.3,
+                           "rightDesign":  422,
+                           "pastBottom":  59.3,
+                           "pastRight":  -1250
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  435.8,
+                           "pastBottom":  2,
+                           "pastRight":  -1236.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  539.3,
+                           "pastBottom":  2,
+                           "pastRight":  -1132.7
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  642.8,
+                           "pastBottom":  2,
+                           "pastRight":  -1029.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  746.3,
+                           "pastBottom":  2,
+                           "pastRight":  -925.7
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  849.8,
+                           "pastBottom":  2,
+                           "pastRight":  -822.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  953.3,
+                           "pastBottom":  2,
+                           "pastRight":  -718.7
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  1056.8,
+                           "pastBottom":  2,
+                           "pastRight":  -615.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  1160.3,
+                           "pastBottom":  2,
+                           "pastRight":  -511.7
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  1263.8,
+                           "pastBottom":  2,
+                           "pastRight":  -408.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  1367.3,
+                           "pastBottom":  2,
+                           "pastRight":  -304.7
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  943,
+                           "rightDesign":  1470.8,
+                           "pastBottom":  2,
+                           "pastRight":  -201.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  435.8,
+                           "pastBottom":  105.5,
+                           "pastRight":  -1236.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  539.3,
+                           "pastBottom":  105.5,
+                           "pastRight":  -1132.7
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  642.8,
+                           "pastBottom":  105.5,
+                           "pastRight":  -1029.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  746.3,
+                           "pastBottom":  105.5,
+                           "pastRight":  -925.7
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  849.8,
+                           "pastBottom":  105.5,
+                           "pastRight":  -822.2
+                       },
+                       {
+                           "id":  "",
+                           "cls":  "cell",
+                           "bottomDesign":  1046.5,
+                           "rightDesign":  953.3,
+                           "pastBottom":  105.5,
+                           "pastRight":  -718.7
+                       }
+                   ],
+    "htmlZoom":  "1",
+    "bodyZoom":  "1",
+    "bodyTransform":  "none"
+}

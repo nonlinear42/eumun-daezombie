@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>layout probe</title>
+</head>
+<body>
+<script>
+(async function () {
+  const target = new URL("./index.html", location.href).href;
+  // This probe is opened as a file; instead we inject via puppeteer.
+  document.body.textContent = "Use chrome headless runner";
+})();
+</script>
+</body>
+</html>

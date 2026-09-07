@@ -1,0 +1,565 @@
+﻿{
+    "viewport":  {
+                     "w":  1920,
+                     "h":  1080,
+                     "innerW":  1920,
+                     "innerH":  1080
+                 },
+    "GAME_FIT":  null,
+    "expected":  {
+                     "scale":  1.147715,
+                     "scaledW":  1918.98,
+                     "scaledH":  1080
+                 },
+    "shell":  {
+                  "id":  "game-viewport-shell",
+                  "className":  "",
+                  "parent":  "/",
+                  "position":  "fixed",
+                  "top":  "0px",
+                  "right":  "0px",
+                  "bottom":  "0px",
+                  "left":  "0px",
+                  "transform":  "none",
+                  "transformOrigin":  "960px 540px",
+                  "overflow":  "hidden/hidden/hidden",
+                  "width":  "1920px",
+                  "height":  "1080px",
+                  "offsetW":  1920,
+                  "offsetH":  1080,
+                  "clientW":  1920,
+                  "clientH":  1080,
+                  "scrollW":  1920,
+                  "scrollH":  1080,
+                  "rect":  {
+                               "x":  0,
+                               "y":  0,
+                               "w":  1920,
+                               "h":  1080,
+                               "right":  1920,
+                               "bottom":  1080
+                           }
+              },
+    "root":  {
+                 "id":  "game-scale-root",
+                 "className":  "",
+                 "parent":  "game-viewport-shell/",
+                 "position":  "absolute",
+                 "top":  "0px",
+                 "right":  "247.5px",
+                 "bottom":  "139px",
+                 "left":  "0.510096px",
+                 "transform":  "matrix(1.14772, 0, 0, 1.14772, 0, 0)",
+                 "transformOrigin":  "0px 0px",
+                 "overflow":  "hidden/hidden/hidden",
+                 "width":  "1672px",
+                 "height":  "941px",
+                 "offsetW":  1672,
+                 "offsetH":  941,
+                 "clientW":  1672,
+                 "clientH":  941,
+                 "scrollW":  1923,
+                 "scrollH":  1082,
+                 "rect":  {
+                              "x":  0.5,
+                              "y":  0,
+                              "w":  1918.98,
+                              "h":  1080,
+                              "right":  1919.48,
+                              "bottom":  1080
+                          }
+             },
+    "sidebar":  {
+                    "id":  null,
+                    "className":  "battle-sidebar battle-sidebar-left sidebar-accordion",
+                    "parent":  "/battle-layout",
+                    "position":  "absolute",
+                    "top":  "96px",
+                    "right":  "1408.02px",
+                    "bottom":  "78.0027px",
+                    "left":  "6px",
+                    "transform":  "none",
+                    "transformOrigin":  "128.995px 383.499px",
+                    "overflow":  "hidden/hidden/hidden",
+                    "width":  "257.989px",
+                    "height":  "766.997px",
+                    "offsetW":  258,
+                    "offsetH":  767,
+                    "clientW":  256,
+                    "clientH":  765,
+                    "scrollW":  256,
+                    "scrollH":  765,
+                    "rect":  {
+                                 "x":  8.41,
+                                 "y":  126.7,
+                                 "w":  340.51,
+                                 "h":  1012.34,
+                                 "right":  348.92,
+                                 "bottom":  1139.04
+                             }
+                },
+    "board":  {
+                  "id":  null,
+                  "className":  "game-board-viewport",
+                  "parent":  "/battle-scene",
+                  "position":  "absolute",
+                  "top":  "459.986px",
+                  "right":  "393.003px",
+                  "bottom":  "31.0054px",
+                  "left":  "288.995px",
+                  "transform":  "none",
+                  "transformOrigin":  "495px 225px",
+                  "overflow":  "visible/visible/visible",
+                  "width":  "990px",
+                  "height":  "450px",
+                  "offsetW":  990,
+                  "offsetH":  450,
+                  "clientW":  990,
+                  "clientH":  450,
+                  "scrollW":  1190,
+                  "scrollH":  450,
+                  "rect":  {
+                               "x":  381.94,
+                               "y":  607.12,
+                               "w":  1306.67,
+                               "h":  593.94,
+                               "right":  1688.61,
+                               "bottom":  1201.07
+                           }
+              },
+    "remove":  {
+                   "id":  "remove-button",
+                   "className":  "",
+                   "parent":  "/sidebar-remove-wrap",
+                   "position":  "relative",
+                   "top":  "0px",
+                   "right":  "0px",
+                   "bottom":  "0px",
+                   "left":  "0px",
+                   "transform":  "none",
+                   "transformOrigin":  "122.133px 61.0666px",
+                   "overflow":  "visible/visible/visible",
+                   "width":  "244.266px",
+                   "height":  "122.133px",
+                   "offsetW":  244,
+                   "offsetH":  122,
+                   "clientW":  244,
+                   "clientH":  122,
+                   "scrollW":  244,
+                   "scrollH":  122,
+                   "rect":  {
+                                "x":  17.46,
+                                "y":  970.09,
+                                "w":  322.4,
+                                "h":  161.2,
+                                "right":  339.87,
+                                "bottom":  1131.29
+                            }
+               },
+    "removeWrap":  {
+                       "id":  null,
+                       "className":  "sidebar-remove-wrap",
+                       "parent":  "/battle-sidebar.battle-sidebar-left.sidebar-accordion",
+                       "position":  "static",
+                       "top":  "auto",
+                       "right":  "auto",
+                       "bottom":  "auto",
+                       "left":  "auto",
+                       "transform":  "none",
+                       "transformOrigin":  "123.125px 61.0666px",
+                       "overflow":  "visible/visible/visible",
+                       "width":  "246.25px",
+                       "height":  "122.133px",
+                       "offsetW":  246,
+                       "offsetH":  122,
+                       "clientW":  246,
+                       "clientH":  122,
+                       "scrollW":  246,
+                       "scrollH":  122,
+                       "rect":  {
+                                    "x":  16.16,
+                                    "y":  970.09,
+                                    "w":  325.02,
+                                    "h":  161.2,
+                                    "right":  341.17,
+                                    "bottom":  1131.29
+                                }
+                   },
+    "hud":  {
+                "id":  null,
+                "className":  "status-bar",
+                "parent":  "game-scale-root/",
+                "position":  "absolute",
+                "top":  "14px",
+                "right":  "-84px",
+                "bottom":  "839.266px",
+                "left":  "836px",
+                "transform":  "matrix(1, 0, 0, 1, -460, 0)",
+                "transformOrigin":  "460px 43.8672px",
+                "overflow":  "visible/visible/visible",
+                "width":  "920px",
+                "height":  "87.7344px",
+                "offsetW":  920,
+                "offsetH":  88,
+                "clientW":  920,
+                "clientH":  88,
+                "scrollW":  920,
+                "scrollH":  88,
+                "rect":  {
+                             "x":  432.04,
+                             "y":  16.07,
+                             "w":  1055.9,
+                             "h":  100.69,
+                             "right":  1487.94,
+                             "bottom":  116.76
+                         }
+            },
+    "lane5":  {
+                  "id":  null,
+                  "className":  "playfield-start-marker",
+                  "parent":  "/playfield-start-markers",
+                  "position":  "absolute",
+                  "top":  "405px",
+                  "right":  "879.008px",
+                  "bottom":  "3.00272px",
+                  "left":  "45px",
+                  "transform":  "matrix(1, 0, 0, 1, -32.9959, -20.9986)",
+                  "transformOrigin":  "32.9959px 20.9986px",
+                  "overflow":  "visible/visible/visible",
+                  "width":  "65.9919px",
+                  "height":  "41.9973px",
+                  "offsetW":  66,
+                  "offsetH":  42,
+                  "clientW":  66,
+                  "clientH":  42,
+                  "scrollW":  66,
+                  "scrollH":  42,
+                  "rect":  {
+                               "x":  397.78,
+                               "y":  1097.42,
+                               "w":  87.1,
+                               "h":  50.64,
+                               "right":  484.88,
+                               "bottom":  1148.06
+                           }
+              },
+    "overflowViewport":  {
+                             "root":  {
+                                          "left":  0,
+                                          "top":  0,
+                                          "right":  0,
+                                          "bottom":  0
+                                      },
+                             "sidebar":  {
+                                             "left":  0,
+                                             "top":  0,
+                                             "right":  0,
+                                             "bottom":  59.04
+                                         },
+                             "board":  {
+                                           "left":  0,
+                                           "top":  0,
+                                           "right":  0,
+                                           "bottom":  121.07
+                                       },
+                             "remove":  {
+                                            "left":  0,
+                                            "top":  0,
+                                            "right":  0,
+                                            "bottom":  51.29
+                                        },
+                             "removeWrap":  {
+                                                "left":  0,
+                                                "top":  0,
+                                                "right":  0,
+                                                "bottom":  51.29
+                                            },
+                             "hud":  {
+                                         "left":  0,
+                                         "top":  0,
+                                         "right":  0,
+                                         "bottom":  0
+                                     },
+                             "lane5":  {
+                                           "left":  0,
+                                           "top":  0,
+                                           "right":  0,
+                                           "bottom":  68.06
+                                       }
+                         },
+    "designLocal":  {
+                        "sidebar":  {
+                                        "x":  7.91,
+                                        "y":  126.7,
+                                        "w":  340.51,
+                                        "h":  1012.34,
+                                        "right":  348.42,
+                                        "bottom":  1139.04,
+                                        "pastRootBottom":  59.04,
+                                        "pastRootRight":  0,
+                                        "pastRootTop":  0,
+                                        "pastRootLeft":  0
+                                    },
+                        "board":  {
+                                      "x":  381.44,
+                                      "y":  607.12,
+                                      "w":  1306.67,
+                                      "h":  593.94,
+                                      "right":  1688.11,
+                                      "bottom":  1201.07,
+                                      "pastRootBottom":  121.07,
+                                      "pastRootRight":  0,
+                                      "pastRootTop":  0,
+                                      "pastRootLeft":  0
+                                  },
+                        "remove":  {
+                                       "x":  16.96,
+                                       "y":  970.09,
+                                       "w":  322.4,
+                                       "h":  161.2,
+                                       "right":  339.37,
+                                       "bottom":  1131.29,
+                                       "pastRootBottom":  51.29,
+                                       "pastRootRight":  0,
+                                       "pastRootTop":  0,
+                                       "pastRootLeft":  0
+                                   },
+                        "removeWrap":  {
+                                           "x":  15.66,
+                                           "y":  970.09,
+                                           "w":  325.02,
+                                           "h":  161.2,
+                                           "right":  340.67,
+                                           "bottom":  1131.29,
+                                           "pastRootBottom":  51.29,
+                                           "pastRootRight":  0,
+                                           "pastRootTop":  0,
+                                           "pastRootLeft":  0
+                                       },
+                        "hud":  {
+                                    "x":  431.54,
+                                    "y":  16.07,
+                                    "w":  1055.9,
+                                    "h":  100.69,
+                                    "right":  1487.44,
+                                    "bottom":  116.76,
+                                    "pastRootBottom":  0,
+                                    "pastRootRight":  0,
+                                    "pastRootTop":  0,
+                                    "pastRootLeft":  0
+                                },
+                        "lane5":  {
+                                      "x":  397.28,
+                                      "y":  1097.42,
+                                      "w":  87.1,
+                                      "h":  50.64,
+                                      "right":  484.38,
+                                      "bottom":  1148.06,
+                                      "pastRootBottom":  68.06,
+                                      "pastRootRight":  0,
+                                      "pastRootTop":  0,
+                                      "pastRootLeft":  0
+                                  }
+                    },
+    "contains":  {
+                     "sidebar":  true,
+                     "board":  true,
+                     "remove":  true,
+                     "hud":  true,
+                     "removeWrap":  true
+                 },
+    "overflowAncestors":  {
+                              "board":  [
+                                            {
+                                                "id":  "game-scale-root",
+                                                "className":  "",
+                                                "overflow":  "hidden/hidden/hidden",
+                                                "position":  "absolute"
+                                            },
+                                            {
+                                                "id":  "game-viewport-shell",
+                                                "className":  "",
+                                                "overflow":  "hidden/hidden/hidden",
+                                                "position":  "fixed"
+                                            },
+                                            {
+                                                "id":  null,
+                                                "className":  "",
+                                                "overflow":  "hidden/hidden/hidden",
+                                                "position":  "relative"
+                                            }
+                                        ],
+                              "remove":  [
+                                             {
+                                                 "id":  null,
+                                                 "className":  "battle-sidebar battle-sidebar-left sidebar-accordion",
+                                                 "overflow":  "hidden/hidden/hidden",
+                                                 "position":  "absolute"
+                                             },
+                                             {
+                                                 "id":  "game-scale-root",
+                                                 "className":  "",
+                                                 "overflow":  "hidden/hidden/hidden",
+                                                 "position":  "absolute"
+                                             },
+                                             {
+                                                 "id":  "game-viewport-shell",
+                                                 "className":  "",
+                                                 "overflow":  "hidden/hidden/hidden",
+                                                 "position":  "fixed"
+                                             },
+                                             {
+                                                 "id":  null,
+                                                 "className":  "",
+                                                 "overflow":  "hidden/hidden/hidden",
+                                                 "position":  "relative"
+                                             }
+                                         ],
+                              "sidebar":  [
+                                              {
+                                                  "id":  null,
+                                                  "className":  "battle-sidebar battle-sidebar-left sidebar-accordion",
+                                                  "overflow":  "hidden/hidden/hidden",
+                                                  "position":  "absolute"
+                                              },
+                                              {
+                                                  "id":  "game-scale-root",
+                                                  "className":  "",
+                                                  "overflow":  "hidden/hidden/hidden",
+                                                  "position":  "absolute"
+                                              },
+                                              {
+                                                  "id":  "game-viewport-shell",
+                                                  "className":  "",
+                                                  "overflow":  "hidden/hidden/hidden",
+                                                  "position":  "fixed"
+                                              },
+                                              {
+                                                  "id":  null,
+                                                  "className":  "",
+                                                  "overflow":  "hidden/hidden/hidden",
+                                                  "position":  "relative"
+                                              }
+                                          ]
+                          },
+    "suspicious":  [
+                       {
+                           "id":  "start-overlay",
+                           "className":  "unlock-overlay",
+                           "inRoot":  false,
+                           "position":  "fixed",
+                           "usesVhVw":  false,
+                           "transform":  "none",
+                           "top":  "0px",
+                           "bottom":  "0px",
+                           "left":  "0px",
+                           "right":  "0px",
+                           "height":  "1080px",
+                           "width":  "1920px",
+                           "rectBottom":  1080,
+                           "rectTop":  0
+                       },
+                       {
+                           "id":  "practice-mode-button",
+                           "className":  "hidden",
+                           "inRoot":  false,
+                           "position":  "fixed",
+                           "usesVhVw":  false,
+                           "transform":  "none",
+                           "top":  "auto",
+                           "bottom":  "18px",
+                           "left":  "auto",
+                           "right":  "18px",
+                           "height":  "auto",
+                           "width":  "auto",
+                           "rectBottom":  0,
+                           "rectTop":  0
+                       },
+                       {
+                           "id":  "start-credit",
+                           "className":  "start-credit",
+                           "inRoot":  false,
+                           "position":  "fixed",
+                           "usesVhVw":  false,
+                           "transform":  "none",
+                           "top":  "1022.61px",
+                           "bottom":  "34px",
+                           "left":  "1724.19px",
+                           "right":  "20px",
+                           "height":  "23.3906px",
+                           "width":  "175.812px",
+                           "rectBottom":  1046,
+                           "rectTop":  1022.61
+                       },
+                       {
+                           "id":  "font-credit",
+                           "className":  "font-credit",
+                           "inRoot":  false,
+                           "position":  "fixed",
+                           "usesVhVw":  false,
+                           "transform":  "none",
+                           "top":  "1052.81px",
+                           "bottom":  "14px",
+                           "left":  "1762.45px",
+                           "right":  "20px",
+                           "height":  "13.1875px",
+                           "width":  "137.547px",
+                           "rectBottom":  1066,
+                           "rectTop":  1052.81
+                       },
+                       {
+                           "id":  "unlock-overlay",
+                           "className":  "unlock-overlay hidden",
+                           "inRoot":  false,
+                           "position":  "fixed",
+                           "usesVhVw":  false,
+                           "transform":  "none",
+                           "top":  "0px",
+                           "bottom":  "auto",
+                           "left":  "0px",
+                           "right":  "auto",
+                           "height":  "100%",
+                           "width":  "100%",
+                           "rectBottom":  0,
+                           "rectTop":  0
+                       },
+                       {
+                           "id":  "practice-panel",
+                           "className":  "hidden",
+                           "inRoot":  false,
+                           "position":  "fixed",
+                           "usesVhVw":  false,
+                           "transform":  "none",
+                           "top":  "0px",
+                           "bottom":  "0px",
+                           "left":  "0px",
+                           "right":  "0px",
+                           "height":  "auto",
+                           "width":  "auto",
+                           "rectBottom":  0,
+                           "rectTop":  0
+                       },
+                       {
+                           "id":  "practice-toolbar",
+                           "className":  "hidden",
+                           "inRoot":  false,
+                           "position":  "fixed",
+                           "usesVhVw":  false,
+                           "transform":  "none",
+                           "top":  "72px",
+                           "bottom":  "auto",
+                           "left":  "auto",
+                           "right":  "200px",
+                           "height":  "auto",
+                           "width":  "126px",
+                           "rectBottom":  0,
+                           "rectTop":  0
+                       }
+                   ],
+    "notes":  {
+                  "rootOverflowHidden":  true,
+                  "shellOverflowHidden":  true,
+                  "boardDesignBottomTarget":  910,
+                  "sidebarDesignBottomTarget":  863
+              }
+}
