@@ -39,7 +39,7 @@
   >
   <link
     rel="stylesheet"
-    href="style.css?v=169"
+    href="style.css?v=175"
   >
 </head>
 
@@ -555,19 +555,27 @@
         소리를 읽고! 식물을 심고! 좀비를 막아라!
       </p>
 
-      <p class="start-hint">
-        처음이라면 튜토리얼부터 시작해보세요.
+      <p class="start-hint" id="start-hint">
+        전체화면으로 시작한 뒤 튜토리얼 또는 게임을 선택하세요.
       </p>
 
 
-      <div class="start-buttons">
+      <div class="start-buttons start-buttons-entry">
 
-        <button id="tutorial-start-button">
+        <button id="fullscreen-enter-button" type="button">
+          ⛶ 전체화면으로 시작
+        </button>
+
+      </div>
+
+      <div class="start-buttons start-buttons-play hidden" hidden>
+
+        <button id="tutorial-start-button" type="button">
           📘 튜토리얼 시작
         </button>
 
-        <button id="direct-start-button">
-          ⚔ 바로 게임 시작
+        <button id="direct-start-button" type="button">
+          ⚔ 게임 시작
         </button>
 
         <button id="raid-test-button" class="hidden" hidden aria-hidden="true">
@@ -612,7 +620,7 @@
 
 
   <script src="data.js?v=2"></script>
-  <script src="game.js?v=172"></script>
+  <script src="game.js?v=178"></script>
 
 </body>
 

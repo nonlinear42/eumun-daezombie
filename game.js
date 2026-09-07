@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // 음운 디펜스 - game.js
 // v30: 좀비/식물 퇴장 모션 + 좀비 카드 배경 제거 대응
 // v29: 양순음 투사체 고정 속도(220px/s) + 실제 도착 시 데미지
@@ -3764,7 +3764,6 @@ function createZombie(wordData,baseZombieHP,baseSpeed,enemyType="normal"){
     element.classList.add("zombie-canvas-hud");
     element.innerHTML=`
       <div class="zombie-word-label">
-        <span class="zombie-type-badge">${enemyData.icon||""}</span>
         <span class="zombie-word-text">${wordData.word}</span>
       </div>
       <div class="hp-bar">
@@ -3774,7 +3773,6 @@ function createZombie(wordData,baseZombieHP,baseSpeed,enemyType="normal"){
   }else{
     element.innerHTML=`
       <div class="zombie-word-label">
-        <span class="zombie-type-badge">${enemyData.icon}</span>
         <span class="zombie-word-text">${wordData.word}</span>
       </div>
       <div class="zombie-visual">
@@ -4068,6 +4066,9 @@ function showTutorialGuideForElement(element){
     }
     tutorialGuideState.active=false;
     return;
+  }
+  if(element.classList.contains("plant-button")&&element.dataset.plant){
+    openSidebarAccordionForPlant(element.dataset.plant);
   }
   element.classList.add(TUTORIAL_GUIDE_HIGHLIGHT_CLASS);
   tutorialGuideState.active=true;
@@ -7878,8 +7879,80 @@ function startRaidTest(){gameStartTime=nowGame();finalScoreCalculated=false;
 }
 
 function startMainGame(){startOverlay.classList.add("hidden");unlockOverlay.classList.add("hidden");resetForMainGame();requestBattleBgm({restart:true});setTimeout(startWave,1000);}
-tutorialStartButton.addEventListener("click",()=>{playSfx("click_ui");startTutorial();});
-directStartButton.addEventListener("click",()=>{playSfx("click_ui");startMainGame();});
+
+/**
+ * 사용자 클릭 제스처 안에서만 호출.
+ * 시작 오버레이가 shell 밖에 있으므로 documentElement를 전체화면 대상으로 사용.
+ * 실패/미지원이어도 resolve — 선택 UI는 항상 진행.
+ */
+function requestGameFullscreen(){
+  const target=document.documentElement;
+  const request=
+    target.requestFullscreen||
+    target.webkitRequestFullscreen||
+    target.webkitRequestFullScreen||
+    target.msRequestFullscreen;
+
+  if(typeof request!=="function"){
+    return Promise.resolve(false);
+  }
+
+  try{
+    const result=request.call(target);
+    if(result&&typeof result.then==="function"){
+      return result.then(()=>true).catch(()=>false);
+    }
+    return Promise.resolve(true);
+  }catch(_err){
+    return Promise.resolve(false);
+  }
+}
+
+function showStartPlayChoices(){
+  if(!startOverlay) return;
+
+  startOverlay.classList.add("start-phase-play");
+  startOverlay.classList.remove("start-phase-entry");
+
+  const entry=startOverlay.querySelector(".start-buttons-entry");
+  const play=startOverlay.querySelector(".start-buttons-play");
+  if(entry){
+    entry.classList.add("hidden");
+    entry.hidden=true;
+  }
+  if(play){
+    play.classList.remove("hidden");
+    play.hidden=false;
+  }
+
+  const hint=document.getElementById("start-hint");
+  if(hint){
+    hint.textContent="처음이라면 튜토리얼부터 시작해보세요.";
+  }
+
+  scheduleGameFitScale();
+}
+
+const fullscreenEnterButton=document.querySelector("#fullscreen-enter-button");
+
+if(fullscreenEnterButton){
+  fullscreenEnterButton.addEventListener("click",()=>{
+    playSfx("click_ui");
+    // 클릭 스택에서 즉시 requestFullscreen — 게임은 시작하지 않음
+    requestGameFullscreen().finally(()=>{
+      showStartPlayChoices();
+    });
+  });
+}
+
+tutorialStartButton.addEventListener("click",()=>{
+  playSfx("click_ui");
+  startTutorial();
+});
+directStartButton.addEventListener("click",()=>{
+  playSfx("click_ui");
+  startMainGame();
+});
 if(raidTestButton){
   raidTestButton.addEventListener("click",()=>{playSfx("click_ui");startRaidTest();});
 }
@@ -8288,6 +8361,115 @@ function formatSidebarPlantButtons(){
   formatRemovePlantButton();
 }
 
+const SIDEBAR_ACCORDION_META={
+  consonant:{icon:"🔵", label:"자음 · 공격"},
+  vowel:{icon:"🟠", label:"모음 · 지원"}
+};
+
+const SIDEBAR_ACCORDION_HOVER_MS=180;
+let sidebarAccordionHoverTimer=null;
+
+function cancelSidebarAccordionHover(){
+  if(sidebarAccordionHoverTimer){
+    clearTimeout(sidebarAccordionHoverTimer);
+    sidebarAccordionHoverTimer=null;
+  }
+}
+
+function scheduleSidebarAccordionHover(categoryId){
+  cancelSidebarAccordionHover();
+  sidebarAccordionHoverTimer=setTimeout(()=>{
+    sidebarAccordionHoverTimer=null;
+    openSidebarAccordion(categoryId);
+  }, SIDEBAR_ACCORDION_HOVER_MS);
+}
+
+function openSidebarAccordion(categoryId){
+  if(categoryId!=="consonant"&&categoryId!=="vowel") return;
+  const sidebar=document.querySelector(".battle-sidebar-left");
+  if(!sidebar) return;
+
+  sidebar.querySelectorAll(".plant-accordion").forEach(acc=>{
+    const open=acc.dataset.accordionId===categoryId;
+    acc.classList.toggle("is-open", open);
+    const header=acc.querySelector(".plant-accordion-header");
+    if(header) header.setAttribute("aria-expanded", open?"true":"false");
+  });
+}
+
+function openSidebarAccordionForPlant(plantType){
+  if(!plantType||plantType==="에너지식물") return;
+  const button=document.querySelector(`.battle-sidebar .plant-button[data-plant="${plantType}"]`);
+  const acc=button&&button.closest(".plant-accordion");
+  if(acc&&acc.dataset.accordionId){
+    openSidebarAccordion(acc.dataset.accordionId);
+  }
+}
+
+function setupSidebarAccordion(sidebar){
+  if(!sidebar||sidebar.dataset.accordionReady==="true") return;
+  sidebar.dataset.accordionReady="true";
+  sidebar.classList.add("sidebar-accordion");
+
+  // 소리꽃: 항상 보이는 고정 카드 (아코디언 제외)
+  const energyGroup=sidebar.querySelector(".energy-group");
+  if(energyGroup){
+    energyGroup.classList.add("sidebar-energy-fixed");
+    const energyTitle=energyGroup.querySelector(".plant-group-title");
+    if(energyTitle) energyTitle.remove();
+  }
+
+  const specs=[
+    {selector:".consonant-group", id:"consonant"},
+    {selector:".vowel-group", id:"vowel"}
+  ];
+
+  specs.forEach(spec=>{
+    const group=sidebar.querySelector(spec.selector);
+    if(!group) return;
+    const meta=SIDEBAR_ACCORDION_META[spec.id];
+    if(!meta) return;
+
+    const title=group.querySelector(".plant-group-title");
+    const buttons=group.querySelector(".plant-group-buttons");
+    if(!title||!buttons) return;
+
+    group.classList.add("plant-accordion");
+    group.dataset.accordionId=spec.id;
+
+    const header=document.createElement("button");
+    header.type="button";
+    header.className="plant-accordion-header";
+    header.setAttribute("aria-expanded","false");
+    header.innerHTML=
+      `<span class="plant-accordion-icon" aria-hidden="true">${meta.icon}</span>`+
+      `<span class="plant-accordion-label">${meta.label}</span>`+
+      `<span class="plant-accordion-chevron" aria-hidden="true"></span>`;
+
+    title.replaceWith(header);
+    buttons.classList.add("plant-accordion-body");
+
+    header.addEventListener("click",()=>{
+      playSfx("click_ui");
+      cancelSidebarAccordionHover();
+      openSidebarAccordion(spec.id);
+    });
+
+    header.addEventListener("pointerenter",(event)=>{
+      if(event.pointerType&&event.pointerType!=="mouse") return;
+      scheduleSidebarAccordionHover(spec.id);
+    });
+
+    header.addEventListener("pointerleave",(event)=>{
+      if(event.pointerType&&event.pointerType!=="mouse") return;
+      cancelSidebarAccordionHover();
+    });
+  });
+
+  // 초기: 자음 open (소리꽃은 고정 표시)
+  openSidebarAccordion("consonant");
+}
+
 function ensureLaneOverlay(scene){
   if(!scene||scene.querySelector(".playfield-lane-overlay"))return;
 
@@ -8398,6 +8580,7 @@ function setupBattleSideLayout(){
     const center=document.querySelector(".battle-center");
     ensureGameBoardViewport(center);
     placePlantInfoBelowBoard();
+    setupSidebarAccordion(document.querySelector(".battle-sidebar-left"));
     return;
   }
 
@@ -8493,6 +8676,7 @@ function setupBattleSideLayout(){
     "none";
 
   formatSidebarPlantButtons();
+  setupSidebarAccordion(left);
   placePlantInfoBelowBoard();
 }
 
@@ -8680,19 +8864,12 @@ function injectVisualAssetStyles(){
     }
 
     .zombie-type-badge {
-      font-family: "SeoulNamsanGame", sans-serif;
-      font-size: calc(12.5px * var(--readability-scale, 1));
-      font-weight: 700;
-      font-stretch: normal;
-      font-synthesis: none;
-      letter-spacing: 0;
-      line-height: 1.15;
-      transform: none;
+      display: none !important;
     }
 
     .zombie-word-text {
       font-family: "SeoulNamsanGame", sans-serif;
-      font-size: calc(13.5px * var(--readability-scale, 1));
+      font-size: calc(15.8px * var(--readability-scale, 1));
       font-weight: 700;
       font-style: normal;
       font-stretch: normal;
