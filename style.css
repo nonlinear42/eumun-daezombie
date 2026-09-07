@@ -12209,14 +12209,34 @@ body {
 }
 
 /* =========================================================
-   이름판 수평 중앙 + 가격 = 소리꽃 템플릿 최종 고정
-   (소리꽃 셀렉터는 변경하지 않음)
+   일반 카드(자음/모음)만 보정 — 소리꽃(.sidebar-energy-fixed / .energy-group) 불변
+   소리꽃 이름/가격/plate geometry는 기존 규칙 유지
    ========================================================= */
 
+/* =========================================================
+   자음/모음 2열 패널: 오른쪽 카드 경계 붙음 수정
+   원인: .plant-accordion-body 가 content-box 라 width:100% + padding 이
+         패널보다 넓어짐 (실측 panel.right - rightCard.right ≈ -8px design)
+   수정: border-box + width:100% + 좌우 padding 8px 만
+   (카드 이미지/텍스트/소리꽃/사이드바 폭 변경 없음)
+   ========================================================= */
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion-body,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-group-buttons.plant-accordion-body,
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-accordion-body {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  padding-top: 5px !important;
+  padding-bottom: 6px !important;
+}
+
 /*
-  원인: left:50% + width만 주면 박스 왼쪽이 50%에 고정되고,
-  이름판이 크림보다 넓으면 텍스트 중심이 크림 중심보다 오른쪽으로 밀림.
-  → 크림 수평 중심에 left를 두고 translateX(-50%)로 판 자체를 중앙 배치.
+  일반 카드 이름판: cream 중심(left+translateX) + 내부 flex 중앙
+  소리꽃 선택자는 포함하지 않음
 */
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-card-copy,
 .battle-sidebar .consonant-group .plant-button .plant-card-copy,
@@ -12255,8 +12275,8 @@ body {
   height: 100% !important;
   margin: 0 !important;
   padding: 0 !important;
-  transform: none !important;
   text-align: center !important;
+  transform: none !important;
 }
 
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-name-text,
@@ -12268,21 +12288,24 @@ body {
   margin: 0 auto !important;
   padding: 0 !important;
   text-align: center !important;
-  /* 가로 쏠림 보정 금지(카드별 X 금지). 세로만 공통 광학 보정 */
+  line-height: 1 !important;
   transform: translateY(var(--sidebar-card-text-nudge-y, 0.5px)) !important;
   scale: none !important;
 }
 
-/* 가격: 소리꽃과 동일 토큰 + 동일 plate 정렬 감각 */
+/*
+  일반 카드 가격: 소리꽃과 동일한 타이포 + plate geometry 복제
+  (소리꽃 자체 규칙은 변경하지 않음)
+*/
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-cost-label,
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-button .plant-cost-label,
 .battle-sidebar .consonant-group .plant-button .plant-cost-label,
 .battle-sidebar .vowel-group .plant-button .plant-cost-label {
-  left: 61% !important;
+  left: 50% !important;
   top: 63.5% !important;
-  width: 20% !important;
+  width: 22% !important;
   height: 16% !important;
-  transform: translateX(-50%) !important;
+  transform: none !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
