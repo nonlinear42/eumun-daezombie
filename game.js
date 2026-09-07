@@ -3580,11 +3580,8 @@ function removePlantFromCell(cell,refund=false,options={}){
 
   if(plant){
     const exitClass=options.exitClass||"";
-    // BOSS 진형파괴(plant-raid-opening-exit)만 진단 플래그로 ghost 스킵
-    const skipFormationGhost=
-      exitClass==="plant-raid-opening-exit" &&
-      PERF_DIAG.disableBossFormationExitGhost;
-    if(!skipFormationGhost){
+    // BOSS 진형파괴: exit ghost(cloneNode/img/CSS/setTimeout) 영구 미생성 — cleanup만 유지
+    if(exitClass!=="plant-raid-opening-exit"){
       createPlantExitGhost(
         cell,
         plant,
@@ -4572,7 +4569,6 @@ function killZombie(zombie){
      __PERF_DIAG__.disableZombieApproachAppearance = true
      __PERF_DIAG__.disableProjectileVisual = true
      __PERF_DIAG__.disablePlantAttack = true
-     __PERF_DIAG__.disableBossFormationExitGhost = true
      __PERF_DIAG__.reset()
    ========================================================= */
 const PERF_DIAG = {
@@ -4581,8 +4577,6 @@ const PERF_DIAG = {
   disableZombieApproachAppearance:false,
   disableProjectileVisual:false,
   disablePlantAttack:false,
-  /** true: BOSS 진형파괴 exit ghost만 스킵 (제거 판정/cleanup 유지) */
-  disableBossFormationExitGhost:false,
 
   frames:0,
   tSupport:0,
@@ -4658,7 +4652,6 @@ const PERF_DIAG = {
       "  __PERF_DIAG__.disableZombieApproachAppearance\n"+
       "  __PERF_DIAG__.disableProjectileVisual\n"+
       "  __PERF_DIAG__.disablePlantAttack\n"+
-      "  __PERF_DIAG__.disableBossFormationExitGhost\n"+
       "비교 시나리오: 레인 내 좀비 1/2/3/5+ 마리에 맞춰 로그의 onBoard 값을 확인하세요.\n"+
       "projectiles: activeProjectiles.length / waveProjDOM≈0 (Canvas 모드) / waveProjRAF=0.\n"+
       "waveWordLabelDOM≈0 (Canvas 좀비 모드 — 일반 Wave 단어 라벨).\n"+
@@ -4762,8 +4755,7 @@ function perfDiagTickFrame(frameMs,onBoard){
     `supportVfxDOM≈${supportVfxDomAvg} canvasSupport=${useCanvasSupportVfx()?"ON":"OFF"} | `+
     `plantImgDOM≈${plantImgDomAvg} canvasPlant=${useCanvasPlants()?"ON":"OFF"} | `+
     `flags supportVis=${PERF_DIAG.disableSupportVisual?"OFF":"ON"} approach=${PERF_DIAG.disableZombieApproachAppearance?"OFF":"ON"} `+
-    `projVis=${PERF_DIAG.disableProjectileVisual?"OFF":"ON"} attack=${PERF_DIAG.disablePlantAttack?"OFF":"ON"} `+
-    `bossFormGhost=${PERF_DIAG.disableBossFormationExitGhost?"OFF":"ON"}`
+    `projVis=${PERF_DIAG.disableProjectileVisual?"OFF":"ON"} attack=${PERF_DIAG.disablePlantAttack?"OFF":"ON"}`
   );
 
   PERF_DIAG.reset();
