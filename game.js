@@ -613,7 +613,7 @@ const RAID_CONFIG = {
   wordChangeInterval: 20000,
 
   // 충격파 주기
-  attackInterval: 6000,
+  attackInterval: 5500,
   shockwaveDamage: 100,
 
   // 레이드 시작 시 기존 식물 제거 비율
