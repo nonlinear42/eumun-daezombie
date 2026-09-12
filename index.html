@@ -58,7 +58,7 @@
   >
   <link
     rel="stylesheet"
-    href="style.css?v=205"
+    href="style.css?v=208"
   >
 </head>
 
@@ -105,6 +105,13 @@
         class="pause-resume-button"
       >
         ▶ 게임 재개
+      </button>
+      <button
+        type="button"
+        id="pause-restart-button"
+        class="pause-restart-button"
+      >
+        ↻ 처음부터 다시하기
       </button>
     </div>
   </div>
@@ -630,8 +637,66 @@
   </div>
 
 
-  <p id="start-credit" class="start-credit" aria-hidden="true"></p>
+  <p id="start-credit" class="start-credit" aria-hidden="true">
+    <span id="start-credit-text"></span>
+  </p>
   <p id="font-credit" class="font-credit" aria-hidden="true">서체: 서울남산체 · 서울특별시</p>
+
+  <button
+    type="button"
+    id="global-thanks-button"
+    class="global-thanks-button"
+  >
+    💛 Thanks to
+  </button>
+
+  <div
+    id="thanks-overlay"
+    class="thanks-overlay hidden"
+    aria-hidden="true"
+  >
+    <div class="thanks-panel" role="dialog" aria-labelledby="thanks-title">
+      <h2 id="thanks-title" class="thanks-title">Thanks to</h2>
+      <p class="thanks-intro">
+        이 게임은 혼자 만든 것 같지만,<br>
+        사실 많은 도움을 받아 완성되었습니다.
+      </p>
+      <div class="thanks-list">
+        <div class="thanks-item">
+          <strong>ChatGPT</strong>
+          <p>코딩을 하나도 모르는 인간을 데려다가<br>기어코 게임 하나를 완성하게 만들어 준 든든한 조력자.</p>
+        </div>
+        <div class="thanks-item">
+          <strong>Cursor</strong>
+          <p>프롬프트만 던져주면 찰떡같이 알아듣고,<br>수없이 많은 코드를 고쳐 준 개발 파트너.</p>
+        </div>
+        <div class="thanks-item">
+          <strong>2025학년도 3학년 12반 학생들</strong>
+          <p>귀찮았을 텐데도 기꺼이 플레이테스트에 참여하고,<br>많은 버그와 개선점을 찾아 준 최초의 테스터들.</p>
+        </div>
+        <div class="thanks-item">
+          <strong>경민이</strong>
+          <p>자신의 아이북을 흔쾌히 빌려줘서,<br>저사양 환경과 아이북 최적화에 엄청난 도움을 준<br>게임 완성의 숨은 공신.</p>
+        </div>
+        <div class="thanks-item">
+          <strong>프리솔</strong>
+          <p>식물대좀비 고수의 눈으로<br>수많은 인게임 피드백과 밸런스 의견을 제공해 준<br>전문 게임 자문위원.</p>
+        </div>
+        <div class="thanks-item">
+          <strong>아내</strong>
+          <p>한 달 넘게 걱정을 같이 해 주고,<br>테스트도 도와주고,<br>끝까지 관심 가져 준 가장 가까운 응원군.</p>
+        </div>
+      </div>
+      <p class="thanks-outro">
+        도와주신 모든 분들 덕분에<br>
+        「음운대좀비」가 완성되었습니다.<br>
+        감사합니다!
+      </p>
+      <button type="button" id="thanks-close-button" class="thanks-close-button">
+        닫기
+      </button>
+    </div>
+  </div>
 
 
   <!-- ======================================
@@ -661,7 +726,7 @@
 
 
   <script src="data.js?v=2"></script>
-  <script src="game.js?v=211"></script>
+  <script src="game.js?v=214"></script>
 
 </body>
 

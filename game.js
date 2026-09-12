@@ -5,7 +5,7 @@
 // 특수 적 4종 + Wave 9 Final + RAID 통합 버전 / v23 전투 리액션 강화
 // ============================================
 
-const GAME_VERSION = "v0.9.0";
+const GAME_VERSION = "v1.0.212";
 const GAME_AUTHOR = "정희재";
 
 const CELL_SIZE = 90;
@@ -2614,9 +2614,57 @@ const tutorialGuide = document.querySelector("#tutorial-guide");
 const tutorialGuideText = document.querySelector("#tutorial-guide-text");
 
 const startCredit = document.querySelector("#start-credit");
-if(startCredit){
+const startCreditText = document.querySelector("#start-credit-text");
+if(startCreditText){
+  startCreditText.textContent = `${GAME_VERSION} · 만든 이 ${GAME_AUTHOR}`;
+}else if(startCredit){
   startCredit.textContent = `${GAME_VERSION} · 만든 이 ${GAME_AUTHOR}`;
 }
+
+function initThanksCreditsUI(){
+  const thanksOverlay=document.getElementById("thanks-overlay");
+  const thanksButton=document.getElementById("global-thanks-button");
+  const thanksClose=document.getElementById("thanks-close-button");
+  if(!thanksOverlay||!thanksButton) return;
+
+  const openThanks=()=>{
+    playSfx("click_ui");
+    thanksOverlay.classList.remove("hidden");
+    thanksOverlay.setAttribute("aria-hidden","false");
+  };
+
+  const closeThanks=()=>{
+    if(thanksOverlay.classList.contains("hidden")) return;
+    playSfx("click_ui");
+    thanksOverlay.classList.add("hidden");
+    thanksOverlay.setAttribute("aria-hidden","true");
+  };
+
+  thanksButton.addEventListener("click",(event)=>{
+    event.stopPropagation();
+    openThanks();
+  });
+
+  if(thanksClose){
+    thanksClose.addEventListener("click",(event)=>{
+      event.stopPropagation();
+      closeThanks();
+    });
+  }
+
+  thanksOverlay.addEventListener("click",(event)=>{
+    if(event.target===thanksOverlay) closeThanks();
+  });
+
+  document.addEventListener("keydown",(event)=>{
+    if(event.key!=="Escape") return;
+    if(thanksOverlay.classList.contains("hidden")) return;
+    event.preventDefault();
+    closeThanks();
+  });
+}
+
+initThanksCreditsUI();
 
 let selectedPlant = null;
 let selectedCost = 0;
@@ -2674,6 +2722,9 @@ function clearWaveSpawnSchedule(){
 let isPaused = false;
 let pauseAccumulatedMs = 0;
 let pauseStartedAt = 0;
+/** next-wave / RAID intro unlock overlay 동안 nowGame 정지 (사용자 pause UI와 분리) */
+let unlockTimeFrozen = false;
+let unlockFreezeStartedAt = 0;
 const pauseBgmState = { battle:false, boss:false };
 const pausableTimeouts = [];
 let pauseButton = null;
@@ -2683,7 +2734,23 @@ function nowGame(){
   if(isPaused){
     return pauseStartedAt - pauseAccumulatedMs;
   }
+  if(unlockTimeFrozen){
+    return unlockFreezeStartedAt - pauseAccumulatedMs;
+  }
   return Date.now() - pauseAccumulatedMs;
+}
+
+function freezeUnlockGameTime(){
+  if(unlockTimeFrozen) return;
+  unlockTimeFrozen=true;
+  unlockFreezeStartedAt=Date.now();
+}
+
+function unfreezeUnlockGameTime(){
+  if(!unlockTimeFrozen) return;
+  pauseAccumulatedMs+=Date.now()-unlockFreezeStartedAt;
+  unlockTimeFrozen=false;
+  unlockFreezeStartedAt=0;
 }
 
 function setPausableTimeout(fn, delayMs){
@@ -2883,6 +2950,17 @@ function initPauseControls(){
     resumeButton.addEventListener("click",()=>{
       playSfx("click_ui");
       setGamePaused(false);
+    });
+  }
+  const restartFromPauseButton=document.getElementById("pause-restart-button");
+  if(restartFromPauseButton){
+    restartFromPauseButton.addEventListener("click",()=>{
+      playSfx("click_ui");
+      const ok=window.confirm(
+        "처음부터 다시 시작할까요?\n현재 진행 상황은 사라집니다."
+      );
+      if(!ok) return;
+      location.reload();
     });
   }
   updatePauseUI();
@@ -6838,11 +6916,17 @@ function playBossWordSwitchEffect(){
   const word=raidBoss?.wordLabelEl;
   if(word){
     word.classList.remove("raid-word-switch-pulse");
-    void word.offsetWidth;
-    word.classList.add("raid-word-switch-pulse");
-    setTimeout(()=>{
-      if(word.isConnected) word.classList.remove("raid-word-switch-pulse");
-    },380);
+    const onAnimEnd=()=>{
+      word.classList.remove("raid-word-switch-pulse");
+      word.removeEventListener("animationend", onAnimEnd);
+    };
+    word.addEventListener("animationend", onAnimEnd);
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        if(!word.isConnected) return;
+        word.classList.add("raid-word-switch-pulse");
+      });
+    });
   }
 
   playSfx("boss_word_switch");
@@ -7867,6 +7951,7 @@ function startRaidBossEntrance(){
 
 function startRaid(){
   unlockOverlay.classList.add("hidden");
+  unfreezeUnlockGameTime();
 
   raidMode=true;
   tutorialMode=false;
@@ -7938,7 +8023,7 @@ function startRaid(){
   setPlantInfoPanelActive(true);
 }
 function showRaidIntro(){
-  waveInProgress=false;forceUnpauseGame();updatePauseUI();unlockTitle.textContent="👑 FINAL BOSS 등장";unlockContent.innerHTML=`<h2>아직 끝나지 않았습니다.</h2><p>Final Wave를 막아냈지만 마지막 적이 등장했습니다.</p><p><strong>모든 레인의 공격 식물이 하나의 보스를 공격합니다.</strong></p><p>보스의 단어는 <strong>20초마다 변경</strong>됩니다. 단어가 바뀌면 공격 가능한 음운 특징도 함께 바뀝니다.</p><p>🧊 저모음은 보스 행동을 잠시 멈추고, 🐌 후설모음은 보스의 이동 속도를 늦추며, ❄ 전설모음은 보스를 완전히 정지시킵니다.</p><p>보스 등장과 동시에 <strong>공격·지원 식물의 약 60%</strong>가 파괴됩니다. 소리꽃은 파괴되지 않습니다. 남은 소리씨앗으로 빠르게 진형을 다시 구축하세요.</p><p>🪏 <strong>RAID에서는 식물을 제거하면 구매 비용의 70%를 환불</strong>합니다. 보스 단어에 맞춰 진형을 적극적으로 재배치하세요.</p><p>⚡ <strong>RAID 유음 공명:</strong> 유음 식물들이 보스를 총 3번 공격하면 공명 추가타가 발생합니다. 연구개음·파찰음·비음도 보스전에서는 각자의 특성이 단일 대상에 맞게 강화됩니다.</p><p>보스는 약 <strong>6초마다</strong> 한 레인의 가장 앞쪽 식물에 충격파를 사용합니다.</p><p>보스는 <strong>세로 5레인 × 가로 1칸 크기</strong>로 천천히 전진합니다. 현재 보스와 맞닿은 한 열의 식물만 공격하며, 그 열을 뚫으면 다시 전진합니다. <strong>왼쪽 끝에 도달하면 즉시 패배합니다.</strong></p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="RAID 시작";unlockNextButton.dataset.action="start-raid";delete unlockNextButton.dataset.wave;
+  waveInProgress=false;forceUnpauseGame();freezeUnlockGameTime();updatePauseUI();unlockTitle.textContent="👑 FINAL BOSS 등장";unlockContent.innerHTML=`<h2>아직 끝나지 않았습니다.</h2><p>Final Wave를 막아냈지만 마지막 적이 등장했습니다.</p><p><strong>모든 레인의 공격 식물이 하나의 보스를 공격합니다.</strong></p><p>보스의 단어는 <strong>20초마다 변경</strong>됩니다. 단어가 바뀌면 공격 가능한 음운 특징도 함께 바뀝니다.</p><p>🧊 저모음은 보스 행동을 잠시 멈추고, 🐌 후설모음은 보스의 이동 속도를 늦추며, ❄ 전설모음은 보스를 완전히 정지시킵니다.</p><p>보스 등장과 동시에 <strong>공격·지원 식물의 약 60%</strong>가 파괴됩니다. 소리꽃은 파괴되지 않습니다. 남은 소리씨앗으로 빠르게 진형을 다시 구축하세요.</p><p>🪏 <strong>RAID에서는 식물을 제거하면 구매 비용의 70%를 환불</strong>합니다. 보스 단어에 맞춰 진형을 적극적으로 재배치하세요.</p><p>⚡ <strong>RAID 유음 공명:</strong> 유음 식물들이 보스를 총 3번 공격하면 공명 추가타가 발생합니다. 연구개음·파찰음·비음도 보스전에서는 각자의 특성이 단일 대상에 맞게 강화됩니다.</p><p>보스는 약 <strong>6초마다</strong> 한 레인의 가장 앞쪽 식물에 충격파를 사용합니다.</p><p>보스는 <strong>세로 5레인 × 가로 1칸 크기</strong>로 천천히 전진합니다. 현재 보스와 맞닿은 한 열의 식물만 공격하며, 그 열을 뚫으면 다시 전진합니다. <strong>왼쪽 끝에 도달하면 즉시 패배합니다.</strong></p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="RAID 시작";unlockNextButton.dataset.action="start-raid";delete unlockNextButton.dataset.wave;
   unlockOverlay.classList.remove("hidden");
 }
 
@@ -8292,7 +8377,7 @@ function renderScoreSubmitPanel(){
       ' type="text"'+
       ' maxlength="40"'+
       ' autocomplete="name"'+
-      ' placeholder="학번+이름을 입력하세요 (예: 31215 홍길동)"'+
+      ' placeholder="학번+이름을 입력하세요 (예: 31230 정희재)"'+
       (scoreSubmitSucceeded?" disabled":"")+
     ">"+
     '<button'+
@@ -8471,11 +8556,11 @@ function pruneDeadZombies(){
 }
 
 function gameLoop(currentTime){
-  if(isPaused){
+  if(isPaused||unlockTimeFrozen){
     for(let i=0;i<activeProjectiles.length;i++){
       activeProjectiles[i].lastFrameTime=null;
     }
-    // pause 중에는 VFX/이동 시간 진행 없음(nowGame freeze). 마지막 Canvas 프레임 유지.
+    // pause / unlock freeze: VFX·이동 시간 진행 없음(nowGame freeze). 마지막 Canvas 프레임 유지.
     requestAnimationFrame(gameLoop);
     return;
   }
@@ -8851,7 +8936,7 @@ function finishTutorial(){
   forceUnpauseGame();
   clearTutorialGuide();
   resetTutorialProgressState();
-  clearWaveSpawnSchedule();tutorialGuide.classList.add("hidden");unlockTitle.textContent="🎓 튜토리얼 완료!";unlockContent.innerHTML=`<p>기본적인 방어 방법을 익혔습니다.</p><p>본게임에서는 단어에 포함된 음운의 특징을 직접 판단해 식물을 선택해야 합니다.</p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="Wave 1 시작";unlockNextButton.dataset.action="start-main";delete unlockNextButton.dataset.wave;unlockOverlay.classList.remove("hidden");
+  clearWaveSpawnSchedule();tutorialGuide.classList.add("hidden");unlockTitle.textContent="🎓 튜토리얼 완료!";unlockContent.innerHTML=`<p>기본적인 방어 방법을 익혔습니다.</p><p>본게임에서는 단어에 포함된 음운의 특징을 직접 판단해 식물을 선택해야 합니다.</p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="Wave 1 시작";unlockNextButton.dataset.action="start-main";delete unlockNextButton.dataset.wave;freezeUnlockGameTime();unlockOverlay.classList.remove("hidden");
   updatePauseUI();
 }
 function resetForMainGame(){gameStartTime=nowGame();finalScoreCalculated=false;resultScreenMode=null;resetBossResultState();killCount=0;scoreSubmissionTestMode=false;finalResultData=null;scoreSubmitInFlight=false;scoreSubmitSucceeded=false;
@@ -9013,6 +9098,7 @@ function startPracticeWave(wave){
 
   startOverlay.classList.add("hidden");
   unlockOverlay.classList.add("hidden");
+  unfreezeUnlockGameTime();
 
   resetForMainGame();
   applyPracticeSetup();
@@ -9179,6 +9265,7 @@ function startRaidTest(){gameStartTime=nowGame();finalScoreCalculated=false;
   practiceMode=false;if(practiceToolbar)practiceToolbar.classList.add("hidden");if(practicePanel)practicePanel.classList.add("hidden");
   startOverlay.classList.add("hidden");
   unlockOverlay.classList.add("hidden");
+  unfreezeUnlockGameTime();
 
   resetForMainGame();
   scoreSubmissionTestMode=true;
@@ -9197,7 +9284,7 @@ function startRaidTest(){gameStartTime=nowGame();finalScoreCalculated=false;
   showRaidIntro();
 }
 
-function startMainGame(){startOverlay.classList.add("hidden");unlockOverlay.classList.add("hidden");resetForMainGame();requestBattleBgm({restart:true});setTimeout(startWave,1000);}
+function startMainGame(){startOverlay.classList.add("hidden");unlockOverlay.classList.add("hidden");unfreezeUnlockGameTime();resetForMainGame();requestBattleBgm({restart:true});setTimeout(startWave,1000);}
 
 /**
  * 사용자 클릭 제스처 안에서만 호출.
@@ -9461,6 +9548,7 @@ if(!window.__phonemeDevTestLogoTapBound && startOverlay){
 
 function showNextWavePopup(nextWave){
   forceUnpauseGame();
+  freezeUnlockGameTime();
   updatePauseUI();
   const newPlants=WAVE_UNLOCKS[nextWave]||[];newPlants.forEach(type=>unlockedPlants.add(type));updatePlantButtons();unlockNextButton.style.display="inline-block";unlockNextButton.dataset.action="next-wave";let plantHTML="";
   if(newPlants.length)plantHTML=newPlants.map(buildUnlockPlantHTML).join("");
@@ -9480,11 +9568,20 @@ unlockNextButton.addEventListener("click",function(){
     location.reload();
     return;
   }
-  if(action==="start-main"){startMainGame();return;}
-  if(action==="start-raid"){startRaid();return;}
+  if(action==="start-main"){
+    unfreezeUnlockGameTime();
+    startMainGame();
+    return;
+  }
+  if(action==="start-raid"){
+    unfreezeUnlockGameTime();
+    startRaid();
+    return;
+  }
   const nextWave=Number(unlockNextButton.dataset.wave);
   if(!nextWave)return;
   unlockOverlay.classList.add("hidden");
+  unfreezeUnlockGameTime();
   currentWave=nextWave;
   startWave();
 });
