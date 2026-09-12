@@ -628,7 +628,7 @@ const RAID_CONFIG = {
   // 보스 이동 / 근접 공격
   startX: BOARD_WIDTH - 120,
   defeatX: 0,
-  moveSpeed: 3.50,
+  moveSpeed: 3.75,
   biteDamage: 70,
   biteInterval: 1000,
   pathRow: 2
