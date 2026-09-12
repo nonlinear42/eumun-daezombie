@@ -2614,18 +2614,35 @@ const tutorialGuide = document.querySelector("#tutorial-guide");
 const tutorialGuideText = document.querySelector("#tutorial-guide-text");
 
 const startCredit = document.querySelector("#start-credit");
-const startCreditText = document.querySelector("#start-credit-text");
-if(startCreditText){
-  startCreditText.textContent = `${GAME_VERSION} · 만든 이 ${GAME_AUTHOR}`;
+const startCreditPrefix = document.querySelector("#start-credit-prefix");
+const startAuthorTrigger = document.querySelector("#start-author-trigger");
+if(startCreditPrefix && startAuthorTrigger){
+  startCreditPrefix.textContent = `${GAME_VERSION} · 만든 이 `;
+  startAuthorTrigger.textContent = GAME_AUTHOR;
 }else if(startCredit){
   startCredit.textContent = `${GAME_VERSION} · 만든 이 ${GAME_AUTHOR}`;
+}
+
+const MOBILE_THANKS_EASTER_EGG_MQ =
+  "(pointer: coarse) and (max-height: 600px)";
+
+function isMobileThanksEasterEgg(){
+  try{
+    return !!(
+      window.matchMedia &&
+      window.matchMedia(MOBILE_THANKS_EASTER_EGG_MQ).matches
+    );
+  }catch(_err){
+    return false;
+  }
 }
 
 function initThanksCreditsUI(){
   const thanksOverlay=document.getElementById("thanks-overlay");
   const thanksButton=document.getElementById("global-thanks-button");
   const thanksClose=document.getElementById("thanks-close-button");
-  if(!thanksOverlay||!thanksButton) return;
+  const authorTrigger=document.getElementById("start-author-trigger");
+  if(!thanksOverlay) return;
 
   const openThanks=()=>{
     playSfx("click_ui");
@@ -2640,10 +2657,20 @@ function initThanksCreditsUI(){
     thanksOverlay.setAttribute("aria-hidden","true");
   };
 
-  thanksButton.addEventListener("click",(event)=>{
-    event.stopPropagation();
-    openThanks();
-  });
+  if(thanksButton){
+    thanksButton.addEventListener("click",(event)=>{
+      event.stopPropagation();
+      openThanks();
+    });
+  }
+
+  if(authorTrigger){
+    authorTrigger.addEventListener("click",(event)=>{
+      if(!isMobileThanksEasterEgg()) return;
+      event.stopPropagation();
+      openThanks();
+    });
+  }
 
   if(thanksClose){
     thanksClose.addEventListener("click",(event)=>{
