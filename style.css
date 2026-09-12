@@ -5500,6 +5500,24 @@ body > h1 {
   filter: brightness(1.04);
 }
 
+/* 모바일/터치: 작은 보조 배지 — 식물 제거·전투 UI 겹침 완화 (PC 미변경) */
+@media (pointer: coarse) {
+  #global-thanks-button.global-thanks-button {
+    left: max(6px, env(safe-area-inset-left, 0px));
+    bottom: max(6px, env(safe-area-inset-bottom, 0px));
+    min-height: 26px;
+    min-width: 0;
+    padding: 3px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+}
+
 /* Thanks to credits overlay — 시작/인게임 공용, battle UI 무관 */
 .thanks-overlay {
   position: fixed;
