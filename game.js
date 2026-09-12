@@ -613,11 +613,11 @@ const RAID_CONFIG = {
   wordChangeInterval: 20000,
 
   // 충격파 주기
-  attackInterval: 5500,
+  attackInterval: 5250,
   shockwaveDamage: 100,
 
   // 레이드 시작 시 기존 식물 제거 비율
-  openingPlantRemovalRatio: 0.60,
+  openingPlantRemovalRatio: 0.65,
 
   // 운이 너무 나빠 시작부터 사실상 패배하는 상황 방지
   minimumPlantsAfterOpening: 5,
@@ -8050,7 +8050,7 @@ function startRaid(){
   setPlantInfoPanelActive(true);
 }
 function showRaidIntro(){
-  waveInProgress=false;forceUnpauseGame();freezeUnlockGameTime();updatePauseUI();unlockTitle.textContent="👑 FINAL BOSS 등장";unlockContent.innerHTML=`<h2>아직 끝나지 않았습니다.</h2><p>Final Wave를 막아냈지만 마지막 적이 등장했습니다.</p><p><strong>모든 레인의 공격 식물이 하나의 보스를 공격합니다.</strong></p><p>보스의 단어는 <strong>20초마다 변경</strong>됩니다. 단어가 바뀌면 공격 가능한 음운 특징도 함께 바뀝니다.</p><p>🧊 저모음은 보스 행동을 잠시 멈추고, 🐌 후설모음은 보스의 이동 속도를 늦추며, ❄ 전설모음은 보스를 완전히 정지시킵니다.</p><p>보스 등장과 동시에 <strong>공격·지원 식물의 약 60%</strong>가 파괴됩니다. 소리꽃은 파괴되지 않습니다. 남은 소리씨앗으로 빠르게 진형을 다시 구축하세요.</p><p>🪏 <strong>RAID에서는 식물을 제거하면 구매 비용의 70%를 환불</strong>합니다. 보스 단어에 맞춰 진형을 적극적으로 재배치하세요.</p><p>⚡ <strong>RAID 유음 공명:</strong> 유음 식물들이 보스를 총 3번 공격하면 공명 추가타가 발생합니다. 연구개음·파찰음·비음도 보스전에서는 각자의 특성이 단일 대상에 맞게 강화됩니다.</p><p>보스는 약 <strong>6초마다</strong> 한 레인의 가장 앞쪽 식물에 충격파를 사용합니다.</p><p>보스는 <strong>세로 5레인 × 가로 1칸 크기</strong>로 천천히 전진합니다. 현재 보스와 맞닿은 한 열의 식물만 공격하며, 그 열을 뚫으면 다시 전진합니다. <strong>왼쪽 끝에 도달하면 즉시 패배합니다.</strong></p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="RAID 시작";unlockNextButton.dataset.action="start-raid";delete unlockNextButton.dataset.wave;
+  waveInProgress=false;forceUnpauseGame();freezeUnlockGameTime();updatePauseUI();unlockTitle.textContent="👑 FINAL BOSS 등장";unlockContent.innerHTML=`<h2>아직 끝나지 않았습니다.</h2><p>Final Wave를 막아냈지만 마지막 적이 등장했습니다.</p><p><strong>모든 레인의 공격 식물이 하나의 보스를 공격합니다.</strong></p><p>보스의 단어는 <strong>20초마다 변경</strong>됩니다. 단어가 바뀌면 공격 가능한 음운 특징도 함께 바뀝니다.</p><p>🧊 저모음은 보스 행동을 잠시 멈추고, 🐌 후설모음은 보스의 이동 속도를 늦추며, ❄ 전설모음은 보스를 완전히 정지시킵니다.</p><p>보스 등장과 동시에 <strong>공격·지원 식물의 약 65%</strong>가 파괴됩니다. 소리꽃은 파괴되지 않습니다. 남은 소리씨앗으로 빠르게 진형을 다시 구축하세요.</p><p>🪏 <strong>RAID에서는 식물을 제거하면 구매 비용의 70%를 환불</strong>합니다. 보스 단어에 맞춰 진형을 적극적으로 재배치하세요.</p><p>⚡ <strong>RAID 유음 공명:</strong> 유음 식물들이 보스를 총 3번 공격하면 공명 추가타가 발생합니다. 연구개음·파찰음·비음도 보스전에서는 각자의 특성이 단일 대상에 맞게 강화됩니다.</p><p>보스는 약 <strong>6초마다</strong> 한 레인의 가장 앞쪽 식물에 충격파를 사용합니다.</p><p>보스는 <strong>세로 5레인 × 가로 1칸 크기</strong>로 천천히 전진합니다. 현재 보스와 맞닿은 한 열의 식물만 공격하며, 그 열을 뚫으면 다시 전진합니다. <strong>왼쪽 끝에 도달하면 즉시 패배합니다.</strong></p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="RAID 시작";unlockNextButton.dataset.action="start-raid";delete unlockNextButton.dataset.wave;
   unlockOverlay.classList.remove("hidden");
 }
 
@@ -9304,7 +9304,7 @@ function startRaidTest(){gameStartTime=nowGame();finalScoreCalculated=false;
 
   if(plantInfoContent){
     plantInfoContent.innerHTML=
-      `<div class="plant-info-layout plant-info-layout-status"><div class="plant-info-details"><div class="plant-info-line"><span class="plant-info-name">RAID TEST</span><span class="plant-info-role">파이널 직전 진형</span></div><p class="plant-info-desc">빽빽한 테스트 진형이 배치되었습니다. RAID 시작 시 약 60%가 파괴됩니다.</p></div></div>`;
+      `<div class="plant-info-layout plant-info-layout-status"><div class="plant-info-details"><div class="plant-info-line"><span class="plant-info-name">RAID TEST</span><span class="plant-info-role">파이널 직전 진형</span></div><p class="plant-info-desc">빽빽한 테스트 진형이 배치되었습니다. RAID 시작 시 약 65%가 파괴됩니다.</p></div></div>`;
   }
   setPlantInfoPanelActive(true);
 
