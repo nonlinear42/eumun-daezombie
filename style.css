@@ -5500,80 +5500,6 @@ body > h1 {
   filter: brightness(1.04);
 }
 
-/* 스마트폰 가로모드:
-   - global Thanks 버튼 숨김
-   - 우측 하단 "정희재" 이스터에그 탭
-   - Thanks panel 스크롤 가독성 */
-@media (pointer: coarse) and (max-height: 600px) {
-  #global-thanks-button.global-thanks-button {
-    display: none !important;
-  }
-
-  .start-credit {
-    /* 시작 overlay(10050) 위에서 이름 탭 가능 */
-    z-index: 10060;
-  }
-
-  #start-author-trigger {
-    cursor: pointer;
-    pointer-events: auto;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  #start-author-trigger:active {
-    opacity: 0.72;
-  }
-
-  .thanks-overlay {
-    padding: max(8px, env(safe-area-inset-top, 0px))
-      max(8px, env(safe-area-inset-right, 0px))
-      max(8px, env(safe-area-inset-bottom, 0px))
-      max(8px, env(safe-area-inset-left, 0px));
-  }
-
-  .thanks-panel {
-    width: min(94vw, 560px);
-    max-height: min(86dvh, 640px);
-    padding: 12px 14px 12px;
-  }
-
-  .thanks-title {
-    margin-bottom: 8px;
-    font-size: clamp(18px, 4.2vw, 24px);
-  }
-
-  .thanks-intro,
-  .thanks-outro {
-    margin-bottom: 10px;
-    font-size: 14px;
-    line-height: 1.55;
-  }
-
-  .thanks-list {
-    margin-bottom: 10px;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .thanks-item {
-    margin-bottom: 10px;
-    padding: 8px 10px;
-  }
-
-  .thanks-item strong {
-    font-size: 15px;
-  }
-
-  .thanks-item p {
-    font-size: 13px;
-    line-height: 1.55;
-  }
-
-  .thanks-close-button {
-    min-height: 44px;
-  }
-}
-
 /* Thanks to credits overlay — 시작/인게임 공용, battle UI 무관 */
 .thanks-overlay {
   position: fixed;
@@ -5701,6 +5627,68 @@ body > h1 {
 
 .thanks-close-button:hover {
   filter: brightness(1.05);
+}
+
+/* 터치 모바일 Thanks 전용:
+   - global Thanks 버튼 숨김
+   - 우측 하단 "정희재" 이스터에그 탭
+   - Thanks panel 가독성 (기본 .thanks-panel 규칙 뒤에 두어 cascade 보장) */
+@media (pointer: coarse) and (hover: none) {
+  #global-thanks-button.global-thanks-button {
+    display: none !important;
+  }
+
+  .start-credit {
+    /* 시작 overlay(10050) 위에서 이름 탭 가능 */
+    z-index: 10060;
+  }
+
+  #start-author-trigger {
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #start-author-trigger:active {
+    opacity: 0.72;
+  }
+
+  .thanks-overlay {
+    padding: max(8px, env(safe-area-inset-top, 0px))
+      max(8px, env(safe-area-inset-right, 0px))
+      max(8px, env(safe-area-inset-bottom, 0px))
+      max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  .thanks-panel {
+    width: min(94vw, 720px);
+    max-height: 88dvh;
+    padding: 14px 16px 12px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+  }
+
+  .thanks-list {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+    overflow: visible;
+  }
+
+  .thanks-item {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+  }
+
+  .thanks-intro,
+  .thanks-outro {
+    margin-bottom: 10px;
+  }
+
+  .thanks-close-button {
+    min-height: 44px;
+  }
 }
 
 /* 서체 출처 — 제작자 표기 바로 아래, 아주 작은 보조 크레딧 */

@@ -2624,7 +2624,7 @@ if(startCreditPrefix && startAuthorTrigger){
 }
 
 const MOBILE_THANKS_EASTER_EGG_MQ =
-  "(pointer: coarse) and (max-height: 600px)";
+  "(pointer: coarse) and (hover: none)";
 
 function isMobileThanksEasterEgg(){
   try{
