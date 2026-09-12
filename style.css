@@ -5500,21 +5500,23 @@ body > h1 {
   filter: brightness(1.04);
 }
 
-/* 모바일/터치: 작은 보조 배지 — 식물 제거·전투 UI 겹침 완화 (PC 미변경) */
-@media (pointer: coarse) {
+/* 스마트폰 가로모드만: Thanks 초소형 배지 (PC·태블릿 미적용) */
+@media (pointer: coarse) and (max-height: 600px) {
   #global-thanks-button.global-thanks-button {
     left: max(6px, env(safe-area-inset-left, 0px));
     bottom: max(6px, env(safe-area-inset-bottom, 0px));
-    min-height: 26px;
+    min-height: 20px;
     min-width: 0;
-    padding: 3px 7px;
-    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 10px;
+    font-size: 8px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: 0;
+    gap: 0;
     box-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.28),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 1px 5px rgba(0, 0, 0, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 }
 
