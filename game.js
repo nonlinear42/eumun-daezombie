@@ -46,7 +46,10 @@ const SFX_FILES = {
   wave_start: "sounds/wave_start.wav",
   boss_start: "sounds/boss_start.wav",
   boss_shockwave: "sounds/boss_shockwave.wav",
-  plant_attack: "sounds/plant_attack.wav"
+  plant_attack: "sounds/plant_attack.wav",
+  game_clear: "sounds/game_clear.mp3",
+  game_over: "sounds/game_over.mp3",
+  boss_word_switch: "sounds/boss_word_switch.mp3"
 };
 
 const SFX_DEFAULTS = {
@@ -60,7 +63,10 @@ const SFX_DEFAULTS = {
   wave_start: { volume: 0.18, cooldownMs: 0, maxConcurrent: 1 },
   boss_start: { volume: 0.55, cooldownMs: 0, maxConcurrent: 1 },
   boss_shockwave: { volume: 0.29, cooldownMs: 0, maxConcurrent: 1 },
-  plant_attack: { volume: 0.7, cooldownMs: 140, maxConcurrent: 2 }
+  plant_attack: { volume: 0.7, cooldownMs: 140, maxConcurrent: 2 },
+  game_clear: { volume: 0.45, cooldownMs: 800, maxConcurrent: 1 },
+  game_over: { volume: 0.42, cooldownMs: 800, maxConcurrent: 1 },
+  boss_word_switch: { volume: 0.20, cooldownMs: 120, maxConcurrent: 1 }
 };
 
 const sfxRuntime = {
@@ -124,9 +130,12 @@ function playSfx(name, options = {}){
       sfxRuntime.pool[name]=[];
     }
 
-    // 재생 중인 인스턴스는 재사용하지 않고, 유휴 인스턴스 또는 새 Audio로 즉시 재생
+    // 재생 중인 인스턴스는 재사용하지 않음. 전투 중 pool 확장은 하지 않음.
     let audio=sfxRuntime.pool[name].find(entry=>entry.paused||entry.ended);
     if(!audio){
+      // preload 실패로 pool이 비어 있을 때만 1회 폴백 (정상 부트 후에는 발생하지 않음)
+      if((sfxRuntime.pool[name].length||0)>0) return;
+      console.warn("[sfx] empty pool fallback:", name);
       audio=new Audio(src);
       audio.preload="auto";
       sfxRuntime.pool[name].push(audio);
@@ -158,15 +167,108 @@ function playSfx(name, options = {}){
   }
 }
 
+/** media readyState>=HAVE_CURRENT_DATA 또는 timeout. timeout 시 false + warning. */
+function waitForMediaReady(media, timeoutMs){
+  return new Promise(resolve=>{
+    if(!media){
+      resolve(false);
+      return;
+    }
+    if(media.readyState>=2){
+      resolve(true);
+      return;
+    }
+    let settled=false;
+    const finish=(ok)=>{
+      if(settled) return;
+      settled=true;
+      clearTimeout(timer);
+      media.removeEventListener("canplaythrough",onOk);
+      media.removeEventListener("loadeddata",onOk);
+      media.removeEventListener("error",onErr);
+      resolve(ok);
+    };
+    const onOk=()=>finish(true);
+    const onErr=()=>finish(false);
+    const timer=setTimeout(()=>{
+      console.warn("[preload] audio timeout:", media.currentSrc||media.src||"(unknown)");
+      finish(false);
+    },Math.max(1,timeoutMs|0));
+    media.addEventListener("canplaythrough",onOk,{once:true});
+    media.addEventListener("loadeddata",onOk,{once:true});
+    media.addEventListener("error",onErr,{once:true});
+    try{ media.load(); }catch(_e){}
+  });
+}
+
+/**
+ * SFX별 maxConcurrent 개수만큼 Audio pool 사전 생성.
+ * 각 요소 preload=auto + load(), timeout 초과 시 warning만 남기고 진행.
+ */
+function preloadSfxPools(options={}){
+  const timeoutMs=options.timeoutMs??4000;
+  const onProgress=typeof options.onProgress==="function"?options.onProgress:null;
+  const names=Object.keys(SFX_FILES);
+  const tasks=[];
+  let done=0;
+  let totalSlots=0;
+
+  names.forEach(name=>{
+    const maxConcurrent=SFX_DEFAULTS[name]?.maxConcurrent??1;
+    totalSlots+=maxConcurrent;
+    if(!sfxRuntime.pool[name]) sfxRuntime.pool[name]=[];
+    while(sfxRuntime.pool[name].length<maxConcurrent){
+      try{
+        const audio=new Audio(SFX_FILES[name]);
+        audio.preload="auto";
+        sfxRuntime.pool[name].push(audio);
+      }catch(err){
+        console.warn("[preload] sfx create failed:", name, err);
+        break;
+      }
+    }
+  });
+
+  if(!totalSlots){
+    if(onProgress) onProgress(0,0);
+    return Promise.resolve({totalSlots:0,ready:0,poolSizes:{}});
+  }
+
+  names.forEach(name=>{
+    (sfxRuntime.pool[name]||[]).forEach(audio=>{
+      tasks.push(
+        waitForMediaReady(audio,timeoutMs).then(ok=>{
+          done+=1;
+          if(onProgress) onProgress(done,totalSlots);
+          return ok;
+        })
+      );
+    });
+  });
+
+  return Promise.all(tasks).then(results=>{
+    const poolSizes=Object.create(null);
+    names.forEach(name=>{ poolSizes[name]=(sfxRuntime.pool[name]||[]).length; });
+    return {
+      totalSlots,
+      ready:results.filter(Boolean).length,
+      poolSizes
+    };
+  });
+}
+
+/** 동기 호환용(구 API). 실제 부트는 preloadSfxPools 사용. */
 function preloadSfx(){
   Object.keys(SFX_FILES).forEach(name=>{
     try{
-      const audio=new Audio(SFX_FILES[name]);
-      audio.preload="auto";
-      if(!sfxRuntime.pool[name]){
-        sfxRuntime.pool[name]=[];
+      const maxConcurrent=SFX_DEFAULTS[name]?.maxConcurrent??1;
+      if(!sfxRuntime.pool[name]) sfxRuntime.pool[name]=[];
+      while(sfxRuntime.pool[name].length<maxConcurrent){
+        const audio=new Audio(SFX_FILES[name]);
+        audio.preload="auto";
+        try{ audio.load(); }catch(_e){}
+        sfxRuntime.pool[name].push(audio);
       }
-      sfxRuntime.pool[name].push(audio);
     }catch(err){
       // ignore
     }
@@ -454,24 +556,58 @@ function initBgmAutoplayUnlock(){
 
 function preloadBattleBgm(){
   try{
-    ensureBattleBgmAudio();
-    ensureBossBgmAudio();
+    const battle=ensureBattleBgmAudio();
+    const boss=ensureBossBgmAudio();
+    // iOS/Safari: 사용자 입력 전 play()/pause() 워밍 금지. load만.
+    try{ battle.load(); }catch(_e){}
+    try{ boss.load(); }catch(_e){}
   }catch(err){
     // ignore
+  }
+}
+
+/** BGM element 생성 + preload/load 대기(timeout). play/pause 워밍 없음. */
+function preloadBattleBgmReady(options={}){
+  const timeoutMs=options.timeoutMs??5000;
+  try{
+    const battle=ensureBattleBgmAudio();
+    const boss=ensureBossBgmAudio();
+    try{ battle.load(); }catch(_e){}
+    try{ boss.load(); }catch(_e){}
+    return Promise.all([
+      waitForMediaReady(battle,timeoutMs),
+      waitForMediaReady(boss,timeoutMs)
+    ]).then(results=>({
+      battleReady:!!results[0],
+      bossReady:!!results[1]
+    }));
+  }catch(err){
+    console.warn("[preload] bgm prepare failed", err);
+    return Promise.resolve({battleReady:false,bossReady:false});
   }
 }
 
 const FINAL_SCORE_CONFIG = {
   targetClearSeconds: 18 * 60,
   maxTimeBonus: 4000,
-  energyPointMultiplier: 5
+  energyPointMultiplier: 5,
+  maxBossDamageBonus: 4000,
+  clearBonus: 1000
 };
 
 let gameStartTime = Date.now();
 let finalScoreCalculated = false;
 
+/** RAID 결과용 보스 피해 snapshot (raidBoss null 이후에도 점수 계산 가능) */
+let bossResultState={
+  entered:false,
+  maxHp:30000,
+  remainingHp:30000,
+  snapshotTaken:false
+};
+
 const RAID_CONFIG = {
-  maxHp: 32000,
+  maxHp: 30000,
 
   // 보스 단어 변경 주기
   wordChangeInterval: 20000,
@@ -492,7 +628,7 @@ const RAID_CONFIG = {
   // 보스 이동 / 근접 공격
   startX: BOARD_WIDTH - 120,
   defeatX: 0,
-  moveSpeed: 3.2,
+  moveSpeed: 3.50,
   biteDamage: 70,
   biteInterval: 1000,
   pathRow: 2
@@ -511,7 +647,7 @@ const RAID_BOSS_CONTACT_OVERSHOOT = 30;
 
 const ENEMY_TYPES = {
   normal: { name:"일반", icon:"🧟", hpMultiplier:1, speedMultiplier:1, biteDamage:25, statusDurationMultiplier:1 },
-  runner: { name:"돌진형", icon:"🏃", hpMultiplier:0.95, speedMultiplier:1.50, biteDamage:25, statusDurationMultiplier:1 },
+  runner: { name:"돌진형", icon:"🏃", hpMultiplier:0.95, speedMultiplier:1.40, biteDamage:25, statusDurationMultiplier:1 },
   breaker:{ name:"파괴형", icon:"💢", hpMultiplier:1.45, speedMultiplier:0.90, biteDamage:50, statusDurationMultiplier:1 },
   resilient:{ name:"불굴형", icon:"🛡", hpMultiplier:1.55, speedMultiplier:1, biteDamage:25, statusDurationMultiplier:0.35 },
   bomber:{
@@ -599,6 +735,7 @@ function getZombieImage(type){
    ========================================================= */
 const IMAGE_CACHE = {
   bySrc:new Map(),
+  decodedSrc:new Set(),
 
   get(src){
     if(!src)return null;
@@ -612,6 +749,7 @@ const IMAGE_CACHE = {
     if(img)return img;
     img=new Image();
     img.decoding="async";
+    img.__cacheKey=src;
     img.src=src;
     this.bySrc.set(src,img);
     return img;
@@ -624,6 +762,65 @@ const IMAGE_CACHE = {
   isReady(src){
     const img=this.get(src);
     return !!(img&&img.complete&&img.naturalWidth>0);
+  },
+
+  /** decode() 가능하면 1회만. 실패/미지원 시 resolve로 통과. */
+  decodeSafe(img){
+    if(!img) return Promise.resolve(false);
+    const key=img.__cacheKey||img.src||"";
+    if(key&&this.decodedSrc.has(key)) return Promise.resolve(true);
+    if(typeof img.decode!=="function"){
+      if(key&&img.complete&&img.naturalWidth>0) this.decodedSrc.add(key);
+      return Promise.resolve(!!(img.complete&&img.naturalWidth>0));
+    }
+    return img.decode().then(()=>{
+      if(key) this.decodedSrc.add(key);
+      return true;
+    }).catch(()=>{
+      // decode 실패해도 게임 진행 — complete면 사용 가능으로 간주
+      if(key&&img.complete&&img.naturalWidth>0) this.decodedSrc.add(key);
+      return false;
+    });
+  },
+
+  /**
+   * load + (가능 시) decode까지 완료하는 Promise.
+   * 동일 src는 Map 캐시로 네트워크 중복 없음.
+   */
+  loadAndDecode(src){
+    if(!src) return Promise.resolve(null);
+    const img=this.load(src);
+    if(img.complete&&img.naturalWidth>0){
+      return this.decodeSafe(img).then(()=>img);
+    }
+    return new Promise(resolve=>{
+      const finish=()=>{
+        this.decodeSafe(img).finally(()=>resolve(img));
+      };
+      img.addEventListener("load",finish,{once:true});
+      img.addEventListener("error",()=>resolve(img),{once:true});
+    });
+  },
+
+  /** 목록을 순차/병렬로 decode 완료. onProgress(done,total) 선택. */
+  preloadAndDecode(paths,onProgress){
+    const list=[...new Set((paths||[]).filter(Boolean))];
+    const total=list.length;
+    let done=0;
+    if(!total){
+      if(typeof onProgress==="function") onProgress(0,0);
+      return Promise.resolve({total:0,decoded:0});
+    }
+    return Promise.all(list.map(src=>
+      this.loadAndDecode(src).then(img=>{
+        done+=1;
+        if(typeof onProgress==="function") onProgress(done,total,src);
+        return img;
+      })
+    )).then(imgs=>{
+      const decoded=imgs.filter(img=>img&&img.complete&&img.naturalWidth>0).length;
+      return {total,decoded};
+    });
   }
 };
 
@@ -829,6 +1026,8 @@ const CANVAS_ZOMBIE_IMAGE_SIZE = {
   resilient:98,
   bomber:98
 };
+/** Canvas 스프라이트만 소폭 확대 (collision/ZOMBIE_WIDTH 불변) */
+const CANVAS_ZOMBIE_DRAW_SCALE = 1.08;
 /** DOM `.zombie-visual` left 오프셋 (−8), 기준 박스 92px */
 const CANVAS_ZOMBIE_VISUAL_BOX = 92;
 const CANVAS_ZOMBIE_VISUAL_OFFSET_X = -8;
@@ -868,7 +1067,7 @@ const CANVAS_HIT_RECOIL_MS = 120;
 const CANVAS_HIT_RECOIL_PX = 4;
 
 function getCanvasZombieDrawSize(enemyType){
-  return CANVAS_ZOMBIE_IMAGE_SIZE[enemyType]||CANVAS_ZOMBIE_IMAGE_SIZE.normal;
+  return (CANVAS_ZOMBIE_IMAGE_SIZE[enemyType]||CANVAS_ZOMBIE_IMAGE_SIZE.normal)*CANVAS_ZOMBIE_DRAW_SCALE;
 }
 
 function getCanvasZombieWalkPeriod(enemyType){
@@ -2172,7 +2371,7 @@ function renderCanvasStatusOverlays(ctx){
 
 function countWaveStatusClassDomElements(){
   if(!board)return 0;
-  return board.querySelectorAll(".zombie.frozen, .zombie.slowed").length;
+  return board.querySelectorAll(".zombie.frozen").length;
 }
 
 function countWaveSupportVfxDomElements(){
@@ -2187,14 +2386,171 @@ function countBoardPlantImageDomElements(){
   return board.querySelectorAll(".plant-image").length;
 }
 
-function preloadGameImages(){
-  const paths=[
+/** 시작 전 load+decode 대상 (동일 URL 중복 없음 · HTTP cache 공유) */
+function getCriticalImagePaths(){
+  return [
     ...Object.values(PLANT_IMAGES),
     ...Object.values(ZOMBIE_IMAGES),
     ...Object.values(PROJECTILE_IMAGES),
-    BOSS_IMAGE
+    BOSS_IMAGE,
+    "images/ui/sori_seed.png",
+    "images/screens/clear_illustration.png",
+    "images/screens/gameover_illustration.png",
+    "images/ui/hud/hud_seed.png",
+    "images/ui/hud/hud_wave.png",
+    "images/ui/hud/hud_life.png",
+    "images/ui/hud/hud_score.png",
+    "images/ui/logo_game.png",
+    "images/ui/buttons/pause_button.png",
+    "images/ui/cards/card_consonant_attack.png",
+    "images/ui/cards/card_vowel_support.png",
+    "images/ui/cards/card_seed_resource.png",
+    "images/ui/cards/card_remove_plant.png",
+    "images/backgrounds/school_field.png"
   ];
-  IMAGE_CACHE.preload(paths);
+}
+
+function preloadGameImages(){
+  IMAGE_CACHE.preload(getCriticalImagePaths());
+}
+
+const BOOT_LOADING_TIPS=[
+  "초성 ㅇ은 오늘도 조용히 자리를 지키는 중...",
+  "양순음들이 입술 위치를 점검하는 중...",
+  "비음 통로를 점검하는 중...",
+  "소리꽃이 소리씨앗을 준비하는 중...",
+  "좀비들에게 단어표를 나눠주는 중...",
+  "파열음이 기압을 맞추는 중...",
+  "모음들이 혀 높이를 재는 중..."
+];
+
+let bootLoadingTipTimer=null;
+
+function updateBootLoadingUI(pct,stageText){
+  const pctEl=document.getElementById("boot-loading-pct");
+  const stageEl=document.getElementById("boot-loading-stage");
+  const fillEl=document.getElementById("boot-loading-bar-fill");
+  const clamped=Math.max(0,Math.min(100,Math.round(pct)));
+  if(pctEl) pctEl.textContent=`${clamped}%`;
+  if(stageEl&&stageText) stageEl.textContent=stageText;
+  if(fillEl) fillEl.style.width=`${clamped}%`;
+}
+
+function clearBootLoadingTipTimer(){
+  if(bootLoadingTipTimer!=null){
+    clearInterval(bootLoadingTipTimer);
+    bootLoadingTipTimer=null;
+  }
+}
+
+function startBootLoadingTipTimer(){
+  clearBootLoadingTipTimer();
+  const tipEl=document.getElementById("boot-loading-tip");
+  if(!tipEl) return;
+  let tipIndex=0;
+  tipEl.textContent=BOOT_LOADING_TIPS[0];
+  bootLoadingTipTimer=setInterval(()=>{
+    tipIndex=(tipIndex+1)%BOOT_LOADING_TIPS.length;
+    tipEl.textContent=BOOT_LOADING_TIPS[tipIndex];
+  },2500);
+}
+
+function showBootLoadingOverlay(){
+  document.body.classList.add("boot-loading-active");
+  const overlay=document.getElementById("boot-loading-overlay");
+  if(overlay){
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden","false");
+  }
+  const start=document.getElementById("start-overlay");
+  if(start){
+    start.classList.add("hidden");
+  }
+  startBootLoadingTipTimer();
+  updateBootLoadingUI(0,"게임 준비 중...");
+}
+
+function hideBootLoadingOverlay(){
+  clearBootLoadingTipTimer();
+  document.body.classList.remove("boot-loading-active");
+  const overlay=document.getElementById("boot-loading-overlay");
+  if(overlay){
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden","true");
+  }
+  const start=document.getElementById("start-overlay");
+  if(start){
+    start.classList.remove("hidden");
+  }
+}
+
+/**
+ * 핵심 asset 완료 대기 게이트.
+ * timeout/실패 시 warning만 남기고 시작 화면으로 진행 (무한 로딩 금지).
+ */
+async function preloadCriticalAssets(){
+  const t0=performance.now();
+  console.info("[preload] critical assets start");
+
+  let imageStats={total:0,decoded:0};
+  let sfxStats={totalSlots:0,ready:0,poolSizes:{}};
+  let bgmStats={battleReady:false,bossReady:false};
+
+  try{
+    buildWordDataCaches();
+    updateBootLoadingUI(3,"단어표를 정리하는 중...");
+  }catch(err){
+    console.warn("[preload] word cache build failed", err);
+  }
+
+  try{
+    const paths=getCriticalImagePaths();
+    imageStats=await IMAGE_CACHE.preloadAndDecode(paths,(done,total)=>{
+      const local=total?Math.round((done/total)*100):100;
+      const overall=4+Math.round((done/Math.max(1,total))*66);
+      updateBootLoadingUI(overall,`이미지 준비 중... ${local}%`);
+    });
+  }catch(err){
+    console.warn("[preload] image decode phase failed", err);
+  }
+
+  try{
+    sfxStats=await preloadSfxPools({
+      timeoutMs:4000,
+      onProgress:(done,total)=>{
+        const local=total?Math.round((done/total)*100):100;
+        const overall=72+Math.round((done/Math.max(1,total))*14);
+        updateBootLoadingUI(overall,`소리들을 깨우는 중... ${local}%`);
+      }
+    });
+  }catch(err){
+    console.warn("[preload] sfx phase failed", err);
+  }
+
+  try{
+    updateBootLoadingUI(88,"배경음악을 준비하는 중...");
+    bgmStats=await preloadBattleBgmReady({timeoutMs:5000});
+  }catch(err){
+    console.warn("[preload] bgm phase failed", err);
+  }
+
+  try{
+    updateBootLoadingUI(94,"보스 준비를 점검하는 중...");
+    prepareRaidBossVisualsWarm();
+  }catch(err){
+    console.warn("[preload] boss warm failed", err);
+  }
+
+  updateBootLoadingUI(100,"준비 완료!");
+  const elapsedMs=Math.round(performance.now()-t0);
+  console.info(`[preload] critical assets done in ${elapsedMs}ms`,{
+    images:imageStats,
+    decodedSrcCount:IMAGE_CACHE.decodedSrc.size,
+    sfx:sfxStats,
+    bgm:bgmStats,
+    bossWarm:!!raidBossVisualWarm.prepared
+  });
+  return {elapsedMs,imageStats,sfxStats,bgmStats};
 }
 
 
@@ -2264,10 +2620,22 @@ if(startCredit){
 
 let selectedPlant = null;
 let selectedCost = 0;
+/* 시각 selected는 마지막 클릭 카드 1장만 — "canonical" | "most-used" */
+let lastPlantSelectSource = "canonical";
 let removeMode = false;
 let energy = 350;
 let life = 5;
 let score = 0;
+/** 실제 좀비 처치 수 (tutorial·누수·BOSS 제외) */
+let killCount = 0;
+/** Apps Script 제출용 TEST 차단 — practice / RAID TEST 등 */
+let scoreSubmissionTestMode = false;
+/** 종료 시 1회 확정 결과 (submit 재계산 금지) */
+let finalResultData = null;
+let scoreSubmitInFlight = false;
+let scoreSubmitSucceeded = false;
+const SCORE_SUBMIT_URL =
+  "https://script.google.com/macros/s/AKfycbzOApkANKrxCqh0vcMnyxAVdTuRStRghBl_su3W4-SPNHe7iDUq-_Iu0A7mCFfPIvaa/exec";
 let currentWave = 1;
 let zombies = [];
 /** 일반 Wave 비행 투사체 (메인 gameLoop에서 일괄 갱신). RAID 투사체는 별도. */
@@ -2281,6 +2649,24 @@ let gameOver = false;
 /** 결과창 상태: null | "clear" | "gameover" */
 let resultScreenMode = null;
 let currentSpawnTimer = null;
+/** Wave 첫 spawn을 startWave 클릭 턴과 분리하기 위한 rAF 핸들 */
+let pendingFirstSpawnRaf = null;
+/**
+ * showNextWavePopup에서 준비한 다음 Wave word pool 얕은 복사본.
+ * shuffle(RNG)는 refillWordBag 시점(첫 spawn)에 수행 — 결과 고정 없음.
+ */
+let pendingWaveWordPoolClone = null;
+
+function clearWaveSpawnSchedule(){
+  if(pendingFirstSpawnRaf!=null){
+    cancelAnimationFrame(pendingFirstSpawnRaf);
+    pendingFirstSpawnRaf=null;
+  }
+  if(currentSpawnTimer){
+    clearInterval(currentSpawnTimer);
+    currentSpawnTimer=null;
+  }
+}
 
 // ============================================
 // Pause / Resume (게임 시간 정지)
@@ -2516,6 +2902,13 @@ let raidDamageSerial = 0;
 let tutorialMode = false;
 let tutorialSpawnIndex = 0;
 let tutorialEnergyBonusGiven = false;
+/** 튜토리얼 전용 레인 A→B→B→C */
+let tutorialLaneA = null;
+let tutorialLaneB = null;
+/** 다음 단계 예약 중복 방지 (rapid 연사 onHit 등) */
+let tutorialAdvancePending = false;
+/** T-03 관찰 후 양순음 명중만 인정 */
+let tutorialRubberLabialArmed = false;
 const TUTORIAL_WORDS = [
   { id:"T-01", word:"바다", phonemes:["ㅂ","ㅏ","ㄷ","ㅏ"] },
   { id:"T-02", word:"도시", phonemes:["ㄷ","ㅗ","ㅅ","ㅣ"] },
@@ -2572,6 +2965,9 @@ let unlockedPlants = new Set(INITIAL_PLANTS);
 
 const CONSONANT_PLANTS = new Set(["양순음","치조음","비음","파열음","유음","마찰음","연구개음","파찰음","경구개음","후음"]);
 const VOWEL_PLANTS = new Set(["평순모음","고모음","중모음","원순모음","저모음","후설모음","전설모음"]);
+/* TOP4 / 결과화면 tie-break: 사이드바 자음→모음 고정 순서 */
+const SIDEBAR_PLANT_ORDER = [...CONSONANT_PLANTS, ...VOWEL_PLANTS];
+const SIDEBAR_PLANT_ORDER_INDEX = new Map(SIDEBAR_PLANT_ORDER.map((type, index) => [type, index]));
 
 // WORD_DB의 debutWave를 기준으로 Wave 풀을 자동 구성한다.
 // 각 Wave에서는 이전 단어가 누적되고,
@@ -2594,6 +2990,51 @@ for(let wave=1;wave<=9;wave++){
     ...currentWaveNew
   ];
 }
+
+/** WORD_DB id → 객체 / features / Wave 후보 객체 (shuffle·RNG는 플레이 시점) */
+const WORD_BY_ID=new Map();
+const WORD_FEATURES_CACHE=new Map();
+const WAVE_WORD_POOL_OBJECTS=Object.create(null);
+const WAVE_UNLOCK_META=Object.create(null);
+
+function buildWordDataCaches(){
+  WORD_BY_ID.clear();
+  WORD_FEATURES_CACHE.clear();
+  Object.keys(WAVE_WORD_POOL_OBJECTS).forEach(k=>delete WAVE_WORD_POOL_OBJECTS[k]);
+  Object.keys(WAVE_UNLOCK_META).forEach(k=>delete WAVE_UNLOCK_META[k]);
+
+  if(typeof WORD_DB!=="undefined"&&Array.isArray(WORD_DB)){
+    WORD_DB.forEach(word=>{
+      if(!word||word.id==null) return;
+      WORD_BY_ID.set(word.id,word);
+      const features=new Set();
+      (word.phonemes||[]).forEach(phoneme=>{
+        const data=PHONEMES[phoneme];
+        if(data) data.features.forEach(feature=>features.add(feature));
+      });
+      WORD_FEATURES_CACHE.set(word.id,Object.freeze([...features]));
+    });
+  }
+
+  for(let wave=1;wave<=9;wave++){
+    const ids=WAVE_WORD_POOLS[wave]||[];
+    WAVE_WORD_POOL_OBJECTS[wave]=ids
+      .map(id=>WORD_BY_ID.get(id))
+      .filter(Boolean);
+  }
+
+  Object.keys(WAVE_UNLOCKS).forEach(waveKey=>{
+    const plants=WAVE_UNLOCKS[waveKey]||[];
+    WAVE_UNLOCK_META[waveKey]={
+      plants:plants.slice(),
+      entries:plants.map(type=>({
+        type,
+        data:PLANT_DB[type]||null,
+        image:getPlantImage(type)
+      }))
+    };
+  });
+}
 let waveWordBag = [];
 let lastSpawnedWordId = null;
 
@@ -2607,11 +3048,53 @@ function shuffleArray(array){
 }
 
 function getCurrentWordPool(){
+  const cached=WAVE_WORD_POOL_OBJECTS[currentWave];
+  if(cached&&cached.length){
+    // shuffleArray가 복사하므로 원본 후보 배열은 그대로 둔다
+    return cached;
+  }
   const ids=WAVE_WORD_POOLS[currentWave]||[];
-  return ids.map(id=>WORD_DB.find(word=>word.id===id)).filter(Boolean);
+  return ids.map(id=>WORD_BY_ID.get(id)||WORD_DB.find(word=>word.id===id)).filter(Boolean);
 }
+function prepareNextWaveWordPoolClone(wave){
+  const w=wave|0;
+  if(!w){
+    pendingWaveWordPoolClone=null;
+    return;
+  }
+  const cached=WAVE_WORD_POOL_OBJECTS[w];
+  if(cached&&cached.length){
+    pendingWaveWordPoolClone={wave:w,items:cached.slice()};
+    return;
+  }
+  const ids=WAVE_WORD_POOLS[w]||[];
+  pendingWaveWordPoolClone={
+    wave:w,
+    items:ids.map(id=>WORD_BY_ID.get(id)||WORD_DB.find(word=>word.id===id)).filter(Boolean)
+  };
+}
+
 function refillWordBag(){
-  waveWordBag=shuffleArray(getCurrentWordPool());
+  // popup에서 clone이 준비됐으면 추가 복사 없이 그 배열을 in-place shuffle
+  if(
+    pendingWaveWordPoolClone&&
+    pendingWaveWordPoolClone.wave===currentWave&&
+    Array.isArray(pendingWaveWordPoolClone.items)&&
+    pendingWaveWordPoolClone.items.length
+  ){
+    const bag=pendingWaveWordPoolClone.items;
+    pendingWaveWordPoolClone=null;
+    for(let i=bag.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      const tmp=bag[i];
+      bag[i]=bag[j];
+      bag[j]=tmp;
+    }
+    waveWordBag=bag;
+  }else{
+    pendingWaveWordPoolClone=null;
+    waveWordBag=shuffleArray(getCurrentWordPool());
+  }
   if(waveWordBag.length>1&&lastSpawnedWordId&&waveWordBag[0].id===lastSpawnedWordId){
     [waveWordBag[0],waveWordBag[1]]=[waveWordBag[1],waveWordBag[0]];
   }
@@ -2680,6 +3163,7 @@ function updatePlantButtons(){
     if(energy<cost){button.classList.add("no-energy");button.disabled=true;}
     else{button.classList.remove("no-energy");button.disabled=false;}
   });
+  updateMostUsedPlantsUI();
 }
 function setPlantInfoPanelActive(active){
   const panel=document.getElementById("plant-info");
@@ -2774,7 +3258,6 @@ function cacheRaidBossHudElements(hud){
     fill:hud.querySelector(".raid-hp-fill"),
     trail:hud.querySelector(".raid-hp-trail"),
     text:hud.querySelector(".raid-hp-text"),
-    word:hud.querySelector(".raid-word"),
     countdown:hud.querySelector(".raid-countdown"),
     status:hud.querySelector(".raid-status")
   };
@@ -2939,14 +3422,38 @@ function buildUnlockPlantHTML(type){
 }
 plantButtons.forEach(button=>button.addEventListener("click",function(){
   playSfx("click_ui");
-  if(gameOver||isPaused||button.disabled) return;
-  if(isTutorialGuideBlockingPlant(button.dataset.plant)) return;
-  removeMode=false; removeButton.classList.remove("selected");
-  selectedPlant=button.dataset.plant; selectedCost=Number(button.dataset.cost);
-  plantButtons.forEach(other=>other.classList.remove("selected"));
-  button.classList.add("selected"); showPlantInfo(selectedPlant);
-  onTutorialGuidePlantSelected(selectedPlant);
+  selectPlantFromSidebar(button.dataset.plant, button);
 }));
+
+function selectPlantFromSidebar(type, clickedButton){
+  if(!type||gameOver||isPaused) return false;
+  if(isTutorialGuideBlockingPlant(type)) return false;
+
+  const canonical=[...plantButtons].find(button=>button.dataset.plant===type);
+  if(!canonical||canonical.disabled) return false;
+
+  removeMode=false;
+  if(removeButton) removeButton.classList.remove("selected");
+  selectedPlant=type;
+  selectedCost=Number(canonical.dataset.cost);
+
+  plantButtons.forEach(other=>other.classList.remove("selected"));
+  document.querySelectorAll(".most-used-plant-button").forEach(other=>other.classList.remove("selected"));
+
+  const visualTarget=
+    clickedButton&&clickedButton.isConnected
+      ? clickedButton
+      : canonical;
+  visualTarget.classList.add("selected");
+  lastPlantSelectSource=
+    visualTarget.classList.contains("most-used-plant-button")
+      ? "most-used"
+      : "canonical";
+
+  showPlantInfo(selectedPlant);
+  onTutorialGuidePlantSelected(selectedPlant);
+  return true;
+}
 function updateRaidRefundUI(){
   if(!removeButton)return;
 
@@ -2977,7 +3484,9 @@ removeButton.addEventListener("click",function(){
   playSfx("click_ui");
   if(gameOver||isPaused) return;
   removeMode=true; selectedPlant=null; selectedCost=0;
+  lastPlantSelectSource="canonical";
   plantButtons.forEach(button=>button.classList.remove("selected"));
+  document.querySelectorAll(".most-used-plant-button").forEach(button=>button.classList.remove("selected"));
   removeButton.classList.add("selected");
   if(plantInfoContent){
     plantInfoContent.innerHTML=`<div class="plant-info-layout plant-info-layout-status"><div class="plant-info-details"><div class="plant-info-line"><span class="plant-info-name">식물 제거</span><span class="plant-info-role">${raidMode ? "환불 70%" : "환불 30%"}</span></div><p class="plant-info-desc">제거할 식물을 선택하세요.</p></div></div>`;
@@ -3170,6 +3679,7 @@ function clearActiveProjectiles(){
   clearCanvasHitEffects();
   clearCanvasDeadZombieVisuals();
   clearCanvasGlobalCastCue();
+  hideGlobalCastAnnouncement();
   clearCanvasSupportVis();
 }
 
@@ -3409,15 +3919,68 @@ function createGlobalFreezeScreen(){
 }
 
 /**
- * 후설모음 전역 cast VFX — Canvas 파동 1개 + 발동 텍스트 (DOM·좀비별 visual 없음).
- * 파동 ~420ms, 텍스트 ~600ms. 기존 main render loop에서만 draw.
+ * 후설/전설 발동 안내 문구 — DOM 1개 재사용 (학교 배경·레인 위).
+ * gameplay와 분리. 새 rAF 없음.
+ */
+const GLOBAL_CAST_ANNOUNCE_MS=1100;
+let globalCastAnnounceEl=null;
+let globalCastAnnounceTimer=null;
+
+function ensureGlobalCastAnnounceEl(){
+  if(globalCastAnnounceEl&&globalCastAnnounceEl.isConnected){
+    return globalCastAnnounceEl;
+  }
+  const host=
+    document.querySelector(".battle-scene")||
+    document.querySelector(".battle-center")||
+    document.getElementById("game-scale-root");
+  if(!host)return null;
+  let el=host.querySelector("#global-cast-announce");
+  if(!el){
+    el=document.createElement("div");
+    el.id="global-cast-announce";
+    el.setAttribute("aria-hidden","true");
+    host.appendChild(el);
+  }
+  globalCastAnnounceEl=el;
+  return el;
+}
+
+function hideGlobalCastAnnouncement(){
+  if(globalCastAnnounceTimer){
+    globalCastAnnounceTimer.clear();
+    globalCastAnnounceTimer=null;
+  }
+  const el=globalCastAnnounceEl;
+  if(el){
+    el.classList.remove("is-visible");
+  }
+}
+
+function showGlobalCastAnnouncement(text,kind){
+  const el=ensureGlobalCastAnnounceEl();
+  if(!el||text==null||text==="")return;
+  el.textContent=String(text);
+  el.classList.remove("cast-kind-back","cast-kind-front","is-visible");
+  el.classList.add(kind==="front"?"cast-kind-front":"cast-kind-back");
+  // 연속 발동 시 fade/scale 재시작 (cast 빈도 낮음)
+  void el.offsetWidth;
+  el.classList.add("is-visible");
+  if(globalCastAnnounceTimer){
+    globalCastAnnounceTimer.clear();
+    globalCastAnnounceTimer=null;
+  }
+  globalCastAnnounceTimer=setPausableTimeout(()=>{
+    globalCastAnnounceTimer=null;
+    el.classList.remove("is-visible");
+  },GLOBAL_CAST_ANNOUNCE_MS);
+}
+
+/**
+ * 후설모음 전역 cast VFX — Canvas 파동만 (발동 문구는 DOM overlay).
+ * 파동 ~420ms. 기존 main render loop에서만 draw.
  */
 let canvasGlobalCastCue=null;
-
-const BACK_VOWEL_CAST_TEXT = "후설모음 발동!";
-const BACK_VOWEL_CAST_TEXT_MS = 600;
-const BACK_VOWEL_CAST_FONT =
-  '700 26px "SeoulNamsanGame","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
 
 function spawnBackVowelGlobalWaveCue(durationMs=420){
   const waveDuration=Math.max(16,durationMs|0);
@@ -3425,10 +3988,8 @@ function spawnBackVowelGlobalWaveCue(durationMs=420){
     kind:"backVowelWave",
     startTime:nowGame(),
     waveDuration,
-    textDuration:BACK_VOWEL_CAST_TEXT_MS,
-    duration:Math.max(waveDuration,BACK_VOWEL_CAST_TEXT_MS),
-    dir:Math.random()<0.5?1:-1,
-    text:BACK_VOWEL_CAST_TEXT
+    duration:waveDuration,
+    dir:Math.random()<0.5?1:-1
   };
 }
 
@@ -3446,69 +4007,45 @@ function renderCanvasGlobalCastCue(ctx){
   }
 
   const waveDuration=cue.waveDuration||cue.duration;
-  if(elapsed<waveDuration){
-    const t=elapsed/waveDuration;
-    let alpha;
-    if(t<0.12)alpha=t/0.12;
-    else if(t>0.72)alpha=1-(t-0.72)/0.28;
-    else alpha=1;
-    alpha=Math.max(0,Math.min(1,alpha));
+  if(elapsed>=waveDuration)return;
 
-    const dir=cue.dir||1;
-    const travel=dir>0?t:1-t;
-    const baseX=travel*(BOARD_WIDTH+120)-60;
-    const colors=[
-      "rgba(170,210,255,",
-      "rgba(140,190,245,",
-      "rgba(120,175,230,"
-    ];
+  const t=elapsed/waveDuration;
+  let alpha;
+  if(t<0.12)alpha=t/0.12;
+  else if(t>0.72)alpha=1-(t-0.72)/0.28;
+  else alpha=1;
+  alpha=Math.max(0,Math.min(1,alpha));
 
-    ctx.save();
-    for(let i=0;i<3;i++){
-      const lag=i*22*dir;
-      const x=baseX-lag;
-      const lineAlpha=alpha*(0.42-i*0.09);
-      if(lineAlpha<=0.01)continue;
-      ctx.globalAlpha=lineAlpha;
-      ctx.strokeStyle=colors[i]+"0.95)";
-      ctx.lineWidth=2.2-i*0.35;
-      ctx.beginPath();
-      const step=10;
-      for(let y=0;y<=BOARD_HEIGHT;y+=step){
-        const wx=x
-          +Math.sin(y*0.038+t*5.5+i*1.1)*14
-          +Math.sin(y*0.017+i)*7;
-        if(y===0)ctx.moveTo(wx,y);
-        else ctx.lineTo(wx,y);
-      }
-      ctx.stroke();
+  const dir=cue.dir||1;
+  const travel=dir>0?t:1-t;
+  const baseX=travel*(BOARD_WIDTH+120)-60;
+  const colors=[
+    "rgba(170,210,255,",
+    "rgba(140,190,245,",
+    "rgba(120,175,230,"
+  ];
+
+  ctx.save();
+  for(let i=0;i<3;i++){
+    const lag=i*22*dir;
+    const x=baseX-lag;
+    const lineAlpha=alpha*(0.42-i*0.09);
+    if(lineAlpha<=0.01)continue;
+    ctx.globalAlpha=lineAlpha;
+    ctx.strokeStyle=colors[i]+"0.95)";
+    ctx.lineWidth=2.2-i*0.35;
+    ctx.beginPath();
+    const step=10;
+    for(let y=0;y<=BOARD_HEIGHT;y+=step){
+      const wx=x
+        +Math.sin(y*0.038+t*5.5+i*1.1)*14
+        +Math.sin(y*0.017+i)*7;
+      if(y===0)ctx.moveTo(wx,y);
+      else ctx.lineTo(wx,y);
     }
-    ctx.restore();
+    ctx.stroke();
   }
-
-  const textDuration=cue.textDuration||BACK_VOWEL_CAST_TEXT_MS;
-  if(elapsed<textDuration&&cue.text){
-    const tt=elapsed/textDuration;
-    let textAlpha;
-    if(tt<0.12)textAlpha=tt/0.12;
-    else if(tt>0.72)textAlpha=1-(tt-0.72)/0.28;
-    else textAlpha=1;
-    textAlpha=Math.max(0,Math.min(1,textAlpha));
-
-    ctx.save();
-    ctx.globalAlpha=textAlpha*0.96;
-    ctx.font=BACK_VOWEL_CAST_FONT;
-    ctx.textAlign="center";
-    ctx.textBaseline="middle";
-    const tx=BOARD_WIDTH/2;
-    const ty=Math.round(BOARD_HEIGHT*0.20);
-    ctx.lineWidth=3;
-    ctx.strokeStyle="rgba(20,32,52,0.72)";
-    ctx.strokeText(cue.text,tx,ty);
-    ctx.fillStyle="rgba(236,246,255,0.98)";
-    ctx.fillText(cue.text,tx,ty);
-    ctx.restore();
-  }
+  ctx.restore();
 }
 
 /** 후설모음 발동 frame spike 진단 (500ms). 콘솔에 avg/max frame·statusVfx ms 출력 */
@@ -3645,8 +4182,12 @@ function removePlantFromCell(cell,refund=false,options={}){
 
   if(plant){
     const exitClass=options.exitClass||"";
-    // BOSS 진형파괴: exit ghost(cloneNode/img/CSS/setTimeout) 영구 미생성 — cleanup만 유지
-    if(exitClass!=="plant-raid-opening-exit"){
+    // BOSS 진형파괴 / shockwave 사망: exit ghost 미생성 — cleanup만 유지
+    // (삽 제거·일반 파괴 등 다른 경로는 기존 ghost 유지)
+    if(
+      exitClass!=="plant-raid-opening-exit"&&
+      !options.skipExitGhost
+    ){
       createPlantExitGhost(
         cell,
         plant,
@@ -3679,7 +4220,14 @@ function removePlantFromCell(cell,refund=false,options={}){
   cell._shockwaveBounceStart=0;
   unmountCanvasPlantNameLabel(cell);
 }
-function recordPlantPlacement(type){if(!tutorialMode) plantPlacementCounts[type]=(plantPlacementCounts[type]||0)+1;}
+function recordPlantPlacement(type){
+  // 본게임에서 학생이 직접 심은 자음/모음만 집계 (소리꽃·튜토리얼·TEST·RAID TEST 제외)
+  if(!type||type==="에너지식물") return;
+  if(tutorialMode||practiceMode||scoreSubmissionTestMode) return;
+  if(!CONSONANT_PLANTS.has(type)&&!VOWEL_PLANTS.has(type)) return;
+  plantPlacementCounts[type]=(plantPlacementCounts[type]||0)+1;
+  updateMostUsedPlantsUI();
+}
 const PLANT_IDLE_MOTION_CLASS = {
   "파열음":"plant-idle-heavy",
   "후음":"plant-idle-heavy",
@@ -3801,9 +4349,21 @@ function createBoard(){
 }
 
 function getWordFeatures(wordData){
+  if(wordData&&wordData.id!=null&&WORD_FEATURES_CACHE.has(wordData.id)){
+    return WORD_FEATURES_CACHE.get(wordData.id);
+  }
   const features=new Set();
-  wordData.phonemes.forEach(phoneme=>{const data=PHONEMES[phoneme];if(data)data.features.forEach(feature=>features.add(feature));});
-  return [...features];
+  if(wordData&&wordData.phonemes){
+    wordData.phonemes.forEach(phoneme=>{
+      const data=PHONEMES[phoneme];
+      if(data) data.features.forEach(feature=>features.add(feature));
+    });
+  }
+  const list=[...features];
+  if(wordData&&wordData.id!=null){
+    WORD_FEATURES_CACHE.set(wordData.id,Object.freeze(list));
+  }
+  return list;
 }
 function getCurrentlyAvailableFeedbackFeatures(){
   const features=new Set();
@@ -3817,13 +4377,19 @@ function recordMissedZombie(zombie){
   zombie.features.forEach(feature=>{if(availableFeatures.has(feature))missedFeatureCounts[feature]=(missedFeatureCounts[feature]||0)+1;});
 }
 
-function createZombie(wordData,baseZombieHP,baseSpeed,enemyType="normal"){
-  const row=Math.floor(Math.random()*BOARD_ROWS);
+function createZombie(wordData,baseZombieHP,baseSpeed,enemyType="normal",options={}){
+  const row=
+    Number.isInteger(options.row)&&
+    options.row>=0&&
+    options.row<BOARD_ROWS
+      ? options.row
+      : Math.floor(Math.random()*BOARD_ROWS);
   const enemyData=ENEMY_TYPES[enemyType]||ENEMY_TYPES.normal;
   const actualHP=Math.round(baseZombieHP*enemyData.hpMultiplier);
   const actualSpeed=baseSpeed*enemyData.speedMultiplier;
   const imagePath=getZombieImage(enemyType);
   const canvasRender=useCanvasZombies();
+  const deferLabelBlur=!!options.deferLabelBlur;
 
   IMAGE_CACHE.load(imagePath);
 
@@ -3894,7 +4460,8 @@ function createZombie(wordData,baseZombieHP,baseSpeed,enemyType="normal"){
     canvasRender,imagePath,visualOffsetX:0,hitFlashUntil:0,
     walkPhase:Math.random()*Math.PI*2,
     walkPeriod:getCanvasZombieWalkPeriod(enemyType),
-    _domPosX:null,_domPosY:null,_domPosAt:0,_domVisOx:null
+    _domPosX:null,_domPosY:null,_domPosAt:0,_domVisOx:null,
+    _deferLabelBlur:deferLabelBlur
   };
   zombies.push(zombie);
   if(canvasRender){
@@ -3904,7 +4471,16 @@ function createZombie(wordData,baseZombieHP,baseSpeed,enemyType="normal"){
     board.appendChild(element);
   }
   updateZombiePosition(zombie,0,true);
-  applyZombieWordLabelBlur(zombie,initialBlurStep);
+  if(deferLabelBlur){
+    // Wave 첫 spawn: DOM append 턴과 blur filter write를 1 frame 분리
+    requestAnimationFrame(()=>{
+      if(!zombie.alive)return;
+      zombie._deferLabelBlur=false;
+      applyZombieWordLabelBlur(zombie,zombie.approachBlurStep|0);
+    });
+  }else{
+    applyZombieWordLabelBlur(zombie,initialBlurStep);
+  }
 }
 /** 접근 blur 단계별 px (DOM 라벨 텍스트만). sprite Canvas 무관. */
 const DOM_WORD_APPROACH_BLUR_PX = [0,1,2,4,4];
@@ -3941,8 +4517,12 @@ function updateZombieApproachAppearance(zombie){
     step=Math.round(ratio*4);
   }
 
-  if(zombie.approachBlurStep===step)return;
+  if(zombie.approachBlurStep===step){
+    // 첫 spawn defer 중이면 step이 같아도 filter write는 아직 안 된 상태일 수 있음 → deferred rAF가 처리
+    return;
+  }
   zombie.approachBlurStep=step;
+  if(zombie._deferLabelBlur)return;
   applyZombieWordLabelBlur(zombie,step);
 }
 function getWaveZombieBaseSpeed(wave=currentWave){
@@ -3953,26 +4533,184 @@ function getWaveZombieBaseSpeed(wave=currentWave){
   return speed;
 }
 
-function spawnZombie(){
-  if(gameOver)return;const config=WAVE_CONFIG[currentWave],wordData=getNextWordData(),enemyType=getNextEnemyType();
-  if(config&&wordData)createZombie(wordData,config.zombieHP,getWaveZombieBaseSpeed(currentWave),enemyType);
+function spawnZombie(options){
+  if(gameOver)return;
+  const config=WAVE_CONFIG[currentWave],wordData=getNextWordData(),enemyType=getNextEnemyType();
+  if(config&&wordData){
+    createZombie(
+      wordData,
+      config.zombieHP,
+      getWaveZombieBaseSpeed(currentWave),
+      enemyType,
+      options||{}
+    );
+  }
 }
+function pickTutorialRow(excludeRows){
+  const exclude=new Set(
+    (excludeRows||[]).filter(r=>Number.isInteger(r)&&r>=0&&r<BOARD_ROWS)
+  );
+  const candidates=[];
+  for(let r=0;r<BOARD_ROWS;r++){
+    if(!exclude.has(r)) candidates.push(r);
+  }
+  if(!candidates.length){
+    for(let r=0;r<BOARD_ROWS;r++) candidates.push(r);
+  }
+  return candidates[Math.floor(Math.random()*candidates.length)];
+}
+
+function resetTutorialProgressState(){
+  tutorialLaneA=null;
+  tutorialLaneB=null;
+  tutorialAdvancePending=false;
+  tutorialRubberLabialArmed=false;
+}
+
+function scheduleNextTutorialStep(delayMs=800){
+  if(!tutorialMode) return;
+  if(tutorialAdvancePending) return;
+  if(tutorialSpawnIndex>=TUTORIAL_WORDS.length) return;
+  tutorialAdvancePending=true;
+  setPausableTimeout(()=>{
+    if(!tutorialMode){
+      tutorialAdvancePending=false;
+      return;
+    }
+    tutorialAdvancePending=false;
+    if(tutorialSpawnIndex>=TUTORIAL_WORDS.length) return;
+    spawnTutorialZombie();
+  },Math.max(0,delayMs|0));
+}
+
+function beginTutorialEnergyPlantStep(){
+  if(!tutorialMode) return;
+  unlockedPlants.add("에너지식물");
+  if(energy<40){
+    energy=40;
+    energyDisplay.textContent=energy;
+  }
+  updatePlantButtons();
+  tutorialRubberLabialArmed=false;
+  tutorialGuideState.energyGuide=true;
+  // 도시(waveIndex 1) 직후 소리꽃 — waveIndex는 1 유지
+  tutorialGuideState.phase="select-plant";
+  tutorialGuideState.plantType="에너지식물";
+  tutorialGuideState.zombieRow=null;
+  tutorialGuideState.cellIndex=null;
+  tutorialGuideState.placeRow=null;
+  if(tutorialGuideText){
+    tutorialGuideText.innerHTML=
+      `앞에서 식물을 배치하면서 <strong>소리씨앗</strong>을 많이 사용했습니다.<br><br>`+
+      `소리씨앗이 부족하면 새로운 식물을 심을 수 없습니다.<br><br>`+
+      `⚡ <strong>소리꽃</strong>은 일정 시간마다 소리씨앗을 만들어냅니다.<br><br>`+
+      `👉 새로 나타난 <strong>소리꽃</strong>을 안전한 뒤쪽에 심어 보세요.`;
+  }
+  tutorialGuide.classList.remove("hidden");
+  updateTutorialGuide();
+}
+
+function onTutorialPlantHit(type,hitTarget){
+  if(!tutorialMode||tutorialAdvancePending) return;
+  if(tutorialGuideState.energyGuide) return;
+
+  const wi=tutorialGuideState.waveIndex;
+  if(wi===0&&type==="양순음"){
+    scheduleNextTutorialStep(700);
+    return;
+  }
+  if(wi===1&&type==="치조음"){
+    // 도시 명중 → 소리꽃 (고무보다 먼저)
+    beginTutorialEnergyPlantStep();
+    return;
+  }
+  if(wi===2&&type==="양순음"&&tutorialRubberLabialArmed){
+    // 같은 B 레인의 고무 명중만 인정 (A 레인 잔여 전투 오인 방지)
+    if(
+      hitTarget&&
+      Number.isInteger(tutorialLaneB)&&
+      hitTarget.row!==tutorialLaneB
+    ){
+      return;
+    }
+    tutorialRubberLabialArmed=false;
+    // 고무 명중 → 나무
+    scheduleNextTutorialStep(700);
+  }
+}
+
+/** 고무: 실제 spawn 이후 blur가 읽힐 만큼 지난 뒤 비공격 설명 */
+function scheduleTutorialRubberExplain(){
+  // 접근 거리의 약 20% 이동(blur 완화) + 관찰 1초
+  const delayMs=
+    Math.round((ZOMBIE_APPROACH_DISTANCE*0.2)/TUTORIAL_ZOMBIE_SPEED*1000)+1000;
+  setPausableTimeout(()=>{
+    if(!tutorialMode||tutorialGuideState.waveIndex!==2) return;
+    if(tutorialGuideState.energyGuide) return;
+    if(tutorialRubberLabialArmed) return;
+    const word=(TUTORIAL_WORDS[2]&&TUTORIAL_WORDS[2].word)||"고무";
+    const savedRow=tutorialGuideState.zombieRow;
+    tutorialGuideText.innerHTML=
+      `어라? 치조음 식물이 공격하지 않네요.<br><br>`+
+      `<strong>${word}</strong>에는 <strong>치조음</strong>이 없습니다.<br><br>`+
+      `대신 <strong>ㅁ</strong>은 <strong>양순음</strong>입니다.<br><br>`+
+      `👉 같은 레인에 <strong>양순음 식물</strong>을 배치해 보세요.`;
+    tutorialRubberLabialArmed=true;
+    beginTutorialGuideWave(2);
+    // beginTutorialGuideWave가 zombieRow를 초기화하므로 spawn 레인 복구
+    if(Number.isInteger(savedRow)){
+      tutorialGuideState.zombieRow=savedRow;
+    }else if(Number.isInteger(tutorialLaneB)){
+      tutorialGuideState.zombieRow=tutorialLaneB;
+    }
+    updateTutorialGuide();
+  },delayMs);
+}
+
 function spawnTutorialZombie(){
   if(!tutorialMode||tutorialSpawnIndex>=TUTORIAL_WORDS.length)return;
   const wordData=TUTORIAL_WORDS[tutorialSpawnIndex];
   if(!wordData){console.error("튜토리얼 단어 없음:",tutorialSpawnIndex);return;}
   const currentIndex=tutorialSpawnIndex;
+
+  let row;
+  if(currentIndex===0){
+    row=pickTutorialRow([]);
+    tutorialLaneA=row;
+  }else if(currentIndex===1){
+    row=pickTutorialRow([tutorialLaneA]);
+    tutorialLaneB=row;
+  }else if(currentIndex===2){
+    row=Number.isInteger(tutorialLaneB)
+      ? tutorialLaneB
+      : pickTutorialRow([tutorialLaneA]);
+    tutorialLaneB=row;
+  }else{
+    // C: B와 다르게, 가능하면 A와도 다르게
+    row=pickTutorialRow([tutorialLaneB,tutorialLaneA]);
+    if(row===tutorialLaneB){
+      row=pickTutorialRow([tutorialLaneB]);
+    }
+  }
+
   showTutorialMessage(currentIndex,wordData);
   tutorialSpawnIndex++;
-  setTimeout(()=>{
+  setPausableTimeout(()=>{
     if(!tutorialMode)return;
-    createZombie(wordData,TUTORIAL_CONFIG.zombieHP,TUTORIAL_ZOMBIE_SPEED,"normal");
+    createZombie(
+      wordData,
+      TUTORIAL_CONFIG.zombieHP,
+      TUTORIAL_ZOMBIE_SPEED,
+      "normal",
+      {row}
+    );
     const spawned=zombies[zombies.length-1];
     if(spawned&&spawned.alive){
       onTutorialGuideZombieSpawned(currentIndex,spawned.row);
     }
   },3000);
 }
+
 function showTutorialMessage(index,wordData){
   tutorialGuide.classList.remove("hidden");
   if(index===0){
@@ -3981,14 +4719,24 @@ function showTutorialMessage(index,wordData){
     return;
   }
   if(index===1){
-    tutorialGuideText.innerHTML=`이번 단어는 <strong>${wordData.word}</strong>입니다.<br><br>ㄷ과 ㅅ은 <strong>치조음</strong>입니다.<br><br>👉 <strong>치조음 식물</strong>을 활용해 방어해 보세요.`;
+    tutorialGuideText.innerHTML=`이번 단어는 <strong>${wordData.word}</strong>입니다.<br><br>ㄷ과 ㅅ은 <strong>치조음</strong>입니다.<br><br>👉 <strong>치조음 식물</strong>을 다른 레인에 배치해 방어해 보세요.`;
     beginTutorialGuideWave(index);
     return;
   }
   if(index===2){
-    unlockedPlants.add("에너지식물");if(energy<40){energy=40;energyDisplay.textContent=energy;}updatePlantButtons();
-    tutorialGuideText.innerHTML=`앞에서 식물을 배치하면서 <strong>소리씨앗</strong>을 많이 사용했습니다.<br><br>소리씨앗이 부족하면 새로운 식물을 심을 수 없습니다.<br><br>⚡ <strong>소리꽃</strong>은 일정 시간마다 소리씨앗을 만들어냅니다.<br><br>👉 새로 나타난 <strong>소리꽃</strong>을 안전한 뒤쪽에 심어 보세요.`;
-    beginTutorialGuideWave(index);
+    // 단어명/정답 미리 말하지 않음 — 실제 spawn·blur 후 scheduleTutorialRubberExplain
+    tutorialRubberLabialArmed=false;
+    tutorialGuideState.energyGuide=false;
+    tutorialGuideState.waveIndex=2;
+    tutorialGuideState.phase="none";
+    tutorialGuideState.plantType=null;
+    tutorialGuideState.zombieRow=null;
+    tutorialGuideState.cellIndex=null;
+    tutorialGuideState.placeRow=null;
+    tutorialGuideText.innerHTML=
+      `이번 적을 잠시 관찰해 보세요.<br><br>`+
+      `치조음 식물이 어떻게 반응하는지 살펴봅시다.`;
+    updateTutorialGuide();
     return;
   }
   tutorialGuideText.innerHTML=`이제 마지막 연습입니다.<br><br>이번에는 정답을 알려주지 않습니다.<br><br><strong>${wordData.word}</strong>에 포함된 음운을 살펴보고 어떤 식물이 공격할 수 있을지 직접 판단해 보세요.<br><br>튜토리얼에서는 적을 놓쳐도 생명이 줄지 않습니다.`;
@@ -4015,12 +4763,12 @@ const TUTORIAL_GUIDE_STEPS={
     preferredColumns:[3,4,5,2,1,0]
   },
   2:{
-    plantType:"에너지식물",
-    placeMode:"back-columns",
-    preferredColumns:[0,1,2],
-    preferredRows:[2,1,3,0,4]
+    plantType:"양순음",
+    placeMode:"zombie-lane",
+    preferredColumns:[3,4,5,2,1,0]
   }
   // 3: 자유 연습 — 유도 없음
+  // 소리꽃은 energyGuide substep로 별도 유도
 };
 
 const tutorialGuideState={
@@ -4031,6 +4779,7 @@ const tutorialGuideState={
   zombieRow:null,
   cellIndex:null,
   placeRow:null,
+  energyGuide:false,  // T-03 양순음 명중 후 소리꽃 배치 유도
   targetEl:null,
   arrowEl:null,
   trackRaf:null,
@@ -4091,6 +4840,7 @@ function clearTutorialGuide(){
   tutorialGuideState.zombieRow=null;
   tutorialGuideState.cellIndex=null;
   tutorialGuideState.placeRow=null;
+  tutorialGuideState.energyGuide=false;
 }
 
 function positionTutorialGuideArrow(targetEl){
@@ -4159,6 +4909,14 @@ function getTutorialPlantButton(plantType){
 }
 
 function getTutorialGuideStepConfig(waveIndex=tutorialGuideState.waveIndex){
+  if(tutorialGuideState.energyGuide){
+    return {
+      plantType:"에너지식물",
+      placeMode:"back-columns",
+      preferredColumns:[0,1,2],
+      preferredRows:[2,1,3,0,4]
+    };
+  }
   if(waveIndex==null) return null;
   return TUTORIAL_GUIDE_STEPS[waveIndex]||null;
 }
@@ -4234,6 +4992,7 @@ function updateTutorialGuide(){
 function beginTutorialGuideWave(waveIndex){
   if(!tutorialMode) return;
   const step=TUTORIAL_GUIDE_STEPS[waveIndex]||null;
+  tutorialGuideState.energyGuide=false;
   tutorialGuideState.waveIndex=waveIndex;
   tutorialGuideState.zombieRow=null;
   tutorialGuideState.cellIndex=null;
@@ -4254,6 +5013,10 @@ function onTutorialGuideZombieSpawned(waveIndex,row){
   tutorialGuideState.zombieRow=row;
   // 이미 배치 단계면 실제 좀비 lane으로 화살표 재계산
   updateTutorialGuide();
+  // 고무: spawn 완료 시점부터 blur·관찰 delay 시작
+  if(waveIndex===2){
+    scheduleTutorialRubberExplain();
+  }
 }
 
 function onTutorialGuidePlantSelected(plantType){
@@ -4274,8 +5037,13 @@ function isValidTutorialGuidePlacement(cell,plantType){
 function onTutorialGuidePlantPlaced(cell,plantType){
   if(!tutorialMode) return;
   if(!isValidTutorialGuidePlacement(cell,plantType)) return;
+  const wasEnergyGuide=!!tutorialGuideState.energyGuide;
   tutorialGuideState.phase="none";
   updateTutorialGuide();
+  if(wasEnergyGuide&&plantType==="에너지식물"){
+    tutorialGuideState.energyGuide=false;
+    scheduleNextTutorialStep(900);
+  }
 }
 
 function isTutorialGuideBlockingPlant(plantType){
@@ -4559,10 +5327,11 @@ function damageZombie(zombie,damage,extraClass=""){
 }
 function triggerBomberExplosion(zombie){
   if(!zombie||zombie.exploded||zombie.enemyType!=="bomber")return;zombie.exploded=true;const data=ENEMY_TYPES.bomber;
+  const explosionRadius=currentWave===9?155:data.explosionRadius;
   const explosionX=zombie.x+ZOMBIE_WIDTH/2,explosionY=zombie.row*CELL_SIZE+CELL_SIZE/2;
   createEffect("💣💥",zombie.x+5,zombie.row*CELL_SIZE+5,"heavy-effect",800);createEffect("💥",zombie.x-20,zombie.row*CELL_SIZE-10,"explosion-effect",850);
   const cells=boardCells;
-  cells.forEach((cell,index)=>{if(cell.dataset.plant!=="true")return;const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;const px=column*CELL_SIZE+CELL_SIZE/2,py=row*CELL_SIZE+CELL_SIZE/2;const distance=Math.hypot(px-explosionX,py-explosionY);if(distance>data.explosionRadius)return;let damage=distance<=data.explosionInnerRadius?data.explosionInnerDamage:data.explosionOuterDamage;damage*=1-getShieldReduction(index,cells);let hp=Number(cell.dataset.plantHp)-damage;cell.dataset.plantHp=hp;updatePlantHPBar(cell);createPlantDamageNumber(index,damage);createEffect("🔥",column*CELL_SIZE+25,row*CELL_SIZE+20,"explosion-effect",550);if(hp<=0)removePlantFromCell(cell,false);});
+  cells.forEach((cell,index)=>{if(cell.dataset.plant!=="true")return;const row=Math.floor(index/BOARD_COLUMNS),column=index%BOARD_COLUMNS;const px=column*CELL_SIZE+CELL_SIZE/2,py=row*CELL_SIZE+CELL_SIZE/2;const distance=Math.hypot(px-explosionX,py-explosionY);if(distance>explosionRadius)return;let damage=distance<=data.explosionInnerRadius?data.explosionInnerDamage:data.explosionOuterDamage;damage*=1-getShieldReduction(index,cells);let hp=Number(cell.dataset.plantHp)-damage;cell.dataset.plantHp=hp;updatePlantHPBar(cell);createPlantDamageNumber(index,damage);createEffect("🔥",column*CELL_SIZE+25,row*CELL_SIZE+20,"explosion-effect",550);if(hp<=0)removePlantFromCell(cell,false);});
 }
 function killZombie(zombie){
   if(!zombie||!zombie.alive)return;
@@ -4614,6 +5383,7 @@ function killZombie(zombie){
   resolvedZombies++;
 
   if(!tutorialMode){
+    killCount++;
     score+=100;
     scoreDisplay.textContent=score;
 
@@ -5201,6 +5971,8 @@ function performNormalAttack(row,column,target,data){
         pos.y,
         {duration:data.attackType==="heavy"?380:280}
       );
+
+      onTutorialPlantHit(type,hitTarget);
     }
   );
 }
@@ -5499,6 +6271,29 @@ function mountRaidBossHud(hud){
   hud.style.pointerEvents="auto";
 }
 
+function createRaidBossHudElement(){
+  const hud=document.createElement("div");
+  hud.id="raid-boss-hud";
+  hud.className="raid-boss-hud-compact";
+  hud.style.pointerEvents="none";
+  hud.innerHTML=`
+      <div class="raid-hud-meta">
+        <span class="raid-hud-title">👑 FINAL BOSS</span>
+        <span class="raid-hud-sep">·</span>
+        <span class="raid-countdown">단어 변경까지 20초</span>
+      </div>
+      <div class="raid-hud-hp-row">
+        <div class="raid-hp-track">
+          <div class="raid-hp-trail"></div>
+          <div class="raid-hp-fill"></div>
+        </div>
+        <span class="raid-hp-text">${RAID_CONFIG.maxHp} / ${RAID_CONFIG.maxHp}</span>
+      </div>
+      <div class="raid-status"></div>
+    `;
+  return hud;
+}
+
 function wireRaidBossImage(body){
   const bossImage=body.querySelector(".raid-boss-image");
   const fallback=body.querySelector(".raid-boss-image-fallback");
@@ -5540,49 +6335,148 @@ function createRaidBossBodyElement(){
   body.style.pointerEvents="none";
   body.style.overflow="visible";
 
-  body.innerHTML=`
-    <div class="raid-boss-visual">
-      <img
-        src="${BOSS_IMAGE}"
-        alt="FINAL BOSS"
-        class="raid-boss-image"
-        draggable="false"
-      >
-      <div class="raid-boss-image-fallback" aria-hidden="true">👹</div>
-    </div>
-  `;
+  const visual=document.createElement("div");
+  visual.className="raid-boss-visual";
+
+  // decode 완료된 IMAGE_CACHE asset을 clone해 first-use decode 비용 회피
+  const cached=IMAGE_CACHE.get(BOSS_IMAGE);
+  let img;
+  if(cached&&cached.complete&&cached.naturalWidth>0){
+    img=cached.cloneNode(true);
+  }else{
+    img=document.createElement("img");
+    img.src=BOSS_IMAGE;
+  }
+  img.className="raid-boss-image";
+  img.alt="FINAL BOSS";
+  img.draggable=false;
+  img.removeAttribute("id");
+
+  const fallback=document.createElement("div");
+  fallback.className="raid-boss-image-fallback";
+  fallback.setAttribute("aria-hidden","true");
+  fallback.textContent="👹";
+
+  visual.appendChild(img);
+  visual.appendChild(fallback);
+  body.appendChild(visual);
+  ensureRaidBossWordChrome(body);
 
   wireRaidBossImage(body);
   return body;
+}
+
+/** RAID 진입 전 HUD/body 셸 1회 생성(숨김·비마운트). HP/단어/연출은 RAID 시작 시 기존 로직. */
+const raidBossVisualWarm={
+  hud:null,
+  body:null,
+  prepared:false
+};
+
+function resetRaidBossBodyTransientState(body){
+  if(!body) return;
+  body.classList.remove(
+    "raid-boss-entering",
+    "raid-boss-landing",
+    "raid-boss-bite",
+    "raid-boss-shockwave",
+    "raid-boss-walking",
+    "raid-boss-motion-paused",
+    "raid-boss-frozen-visual",
+    "raid-boss-slowed-visual"
+  );
+  body.style.removeProperty("visibility");
+  body.style.removeProperty("opacity");
+  body.style.removeProperty("transform");
+  const warn=body.querySelector(".raid-boss-word-warning");
+  if(warn){
+    warn.classList.remove("is-visible","is-imminent","is-changed");
+    warn.textContent="";
+  }
+  const wordLabel=body.querySelector(".raid-boss-word-label");
+  if(wordLabel){
+    wordLabel.classList.remove("raid-word-switch-pulse");
+    wordLabel.textContent="";
+  }
+}
+
+/** 보스 body 직속 word chrome — warning+label 묶음, visual transform과 분리 */
+function ensureRaidBossWordChrome(body){
+  if(!body) return null;
+
+  let chrome=null;
+  let wordLabel=null;
+  let warn=null;
+  const kids=body.children;
+  for(let i=0;i<kids.length;i++){
+    const el=kids[i];
+    if(el.classList.contains("raid-boss-word-chrome")) chrome=el;
+    else if(el.classList.contains("raid-boss-word-label")) wordLabel=el;
+    else if(el.classList.contains("raid-boss-word-warning")) warn=el;
+  }
+
+  if(chrome){
+    if(!wordLabel) wordLabel=chrome.querySelector(".raid-boss-word-label");
+    if(!warn) warn=chrome.querySelector(".raid-boss-word-warning");
+  }
+
+  if(!chrome){
+    chrome=document.createElement("div");
+    chrome.className="raid-boss-word-chrome";
+    body.appendChild(chrome);
+  }
+
+  if(!wordLabel){
+    wordLabel=document.createElement("div");
+    wordLabel.className="raid-boss-word-label";
+    wordLabel.setAttribute("aria-hidden","true");
+    wordLabel.textContent="";
+  }
+  if(!warn){
+    warn=document.createElement("div");
+    warn.className="raid-boss-word-warning raid-alert-text";
+    warn.setAttribute("aria-hidden","true");
+    warn.textContent="";
+  }
+
+  // 공통 container 안에 수직 stack (warning이 label 위 — CSS absolute로 밀착)
+  if(warn.parentElement!==chrome) chrome.appendChild(warn);
+  if(wordLabel.parentElement!==chrome) chrome.appendChild(wordLabel);
+
+  if(raidBoss){
+    raidBoss.wordLabelEl=wordLabel;
+    raidBoss.wordWarnEl=warn;
+  }
+
+  return {chrome,wordLabel,warn};
+}
+
+function bindRaidBossWordChrome(body){
+  if(!body) return;
+  ensureRaidBossWordChrome(body);
+}
+
+function prepareRaidBossVisualsWarm(){
+  if(raidBossVisualWarm.prepared) return raidBossVisualWarm;
+  if(!raidBossVisualWarm.hud){
+    raidBossVisualWarm.hud=createRaidBossHudElement();
+  }
+  if(!raidBossVisualWarm.body){
+    raidBossVisualWarm.body=createRaidBossBodyElement();
+  }
+  raidBossVisualWarm.prepared=true;
+  return raidBossVisualWarm;
 }
 
 function ensureRaidBossVisual(){
   if(!raidMode||!raidBoss||!board) return;
 
   if(!raidBoss.hud||!raidBoss.hud.isConnected){
-    const hud=document.createElement("div");
-    hud.id="raid-boss-hud";
-    hud.className="raid-boss-hud-compact";
-    hud.style.pointerEvents="none";
-
-    hud.innerHTML=`
-      <div class="raid-hud-meta">
-        <span class="raid-hud-title">👑 FINAL BOSS</span>
-        <span class="raid-hud-sep">·</span>
-        <span class="raid-word">-</span>
-        <span class="raid-hud-sep">·</span>
-        <span class="raid-countdown">단어 변경까지 20초</span>
-      </div>
-      <div class="raid-hud-hp-row">
-        <div class="raid-hp-track">
-          <div class="raid-hp-trail"></div>
-          <div class="raid-hp-fill"></div>
-        </div>
-        <span class="raid-hp-text">${RAID_CONFIG.maxHp} / ${RAID_CONFIG.maxHp}</span>
-      </div>
-      <div class="raid-status"></div>
-    `;
-
+    if(!raidBossVisualWarm.hud){
+      raidBossVisualWarm.hud=createRaidBossHudElement();
+    }
+    const hud=raidBossVisualWarm.hud;
+    hud.style.removeProperty("display");
     mountRaidBossHud(hud);
     raidBoss.hud=hud;
     cacheRaidBossHudElements(hud);
@@ -5593,10 +6487,16 @@ function ensureRaidBossVisual(){
   mountRaidBossHud(raidBoss.hud);
 
   if(!raidBoss.body||!raidBoss.body.isConnected){
-    raidBoss.body=createRaidBossBodyElement();
-    board.appendChild(raidBoss.body);
+    if(!raidBossVisualWarm.body){
+      raidBossVisualWarm.body=createRaidBossBodyElement();
+    }
+    const body=raidBossVisualWarm.body;
+    resetRaidBossBodyTransientState(body);
+    raidBoss.body=body;
+    board.appendChild(body);
   }
 
+  bindRaidBossWordChrome(raidBoss.body);
   updateRaidBossBodyPosition();
   updateRaidBossUI();
 }
@@ -5659,15 +6559,18 @@ function triggerRaidBossBite(blockingCells){
 function triggerRaidBossShockwaveMotion(){
   if(!raidBoss || !raidBoss.body) return;
 
-  raidBoss.body.classList.remove("raid-boss-shockwave");
-  void raidBoss.body.offsetWidth;
-  raidBoss.body.classList.add("raid-boss-shockwave");
-
-  setTimeout(() => {
-    if(raidBoss && raidBoss.body && raidBoss.body.isConnected){
-      raidBoss.body.classList.remove("raid-boss-shockwave");
-    }
-  }, 650);
+  const body=raidBoss.body;
+  // 강제 offsetWidth reflow 대신 다음 frame에 class 재적용 (CSS anim restart)
+  body.classList.remove("raid-boss-shockwave");
+  requestAnimationFrame(()=>{
+    if(!raidBoss || raidBoss.body!==body || !body.isConnected) return;
+    body.classList.add("raid-boss-shockwave");
+    setTimeout(()=>{
+      if(raidBoss && raidBoss.body===body && body.isConnected){
+        body.classList.remove("raid-boss-shockwave");
+      }
+    },650);
+  });
 }
 
 function setRaidBossWalking(isWalking){
@@ -5778,8 +6681,9 @@ function updateRaidBossUI(now=nowGame()){
     els.text.textContent=hpTextValue;
   }
 
-  if(els.word&&wordValue&&prev.word!==wordValue){
-    els.word.textContent=wordValue;
+  const wordEl=raidBoss.wordLabelEl;
+  if(wordEl&&wordValue&&prev.word!==wordValue){
+    wordEl.textContent=wordValue;
   }
 
   if(els.countdown&&prev.countdownSec!==countdownSec){
@@ -5818,13 +6722,7 @@ function changeRaidBossWord(now=nowGame()){
   // 전환 시 경고 문구가 남아 있으면 즉시 제거
   clearBossWordWarningElements();
 
-  createEffect(
-    "단어 변경!",
-    RAID_WORD_ALERT_POS.x,
-    RAID_WORD_ALERT_POS.y,
-    "raid-alert-text raid-collapse-effect",
-    850
-  );
+  showRaidBossWordChangedAlert();
   updateRaidBossUI(now);
 
   // 첫 단어 세팅이 아닌 실제 전환 순간에만 강조/전환음
@@ -5847,7 +6745,7 @@ function processRaidWordChangeWarning(now=nowGame()){
   showBossWordWarning();
 }
 
-function clearBossWordWarningElements(){
+function clearBossWordWarnTimer(){
   if(raidBossWordWarnTimer){
     if(typeof raidBossWordWarnTimer==="object" && typeof raidBossWordWarnTimer.clear==="function"){
       raidBossWordWarnTimer.clear();
@@ -5856,12 +6754,28 @@ function clearBossWordWarningElements(){
     }
     raidBossWordWarnTimer=null;
   }
-  document.querySelectorAll(".raid-word-warn").forEach((el)=>el.remove());
+}
+
+function clearBossWordWarningElements(){
+  clearBossWordWarnTimer();
+  const warn=raidBoss?.wordWarnEl;
+  if(warn){
+    warn.classList.remove("is-visible","is-imminent","is-changed");
+    warn.textContent="";
+  }
+  // 레거시 board 고정 좌표 경고 orphan 정리
+  if(board){
+    board.querySelectorAll(":scope > .raid-word-warn").forEach((el)=>el.remove());
+  }
 }
 
 function clearRaidBossWordChangeFx(){
   clearBossWordWarningElements();
-  document.querySelectorAll(".raid-word.raid-word-switch-pulse").forEach((el)=>{
+  const wordLabel=raidBoss?.wordLabelEl;
+  if(wordLabel){
+    wordLabel.classList.remove("raid-word-switch-pulse");
+  }
+  document.querySelectorAll(".raid-boss-word-label.raid-word-switch-pulse").forEach((el)=>{
     el.classList.remove("raid-word-switch-pulse");
   });
   if(raidBoss){
@@ -5870,31 +6784,58 @@ function clearRaidBossWordChangeFx(){
 }
 
 function showBossWordWarning(){
-  if(!board) return;
+  if(!raidBoss||!raidBoss.body) return;
+
+  bindRaidBossWordChrome(raidBoss.body);
+  const warn=raidBoss.wordWarnEl;
+  if(!warn) return;
 
   clearBossWordWarningElements();
 
-  // 단어 변경! 과 동일 좌표 / attack-effect transform 기준
-  const warn=document.createElement("div");
-  warn.className="attack-effect raid-word-warn raid-alert-text";
   warn.textContent="단어 변경 임박!";
-  warn.setAttribute("aria-hidden","true");
-  warn.style.left=RAID_WORD_ALERT_POS.x+"px";
-  warn.style.top=RAID_WORD_ALERT_POS.y+"px";
-  board.appendChild(warn);
+  warn.classList.remove("is-changed");
+  warn.classList.add("is-visible","is-imminent");
 
   // SFX: sounds/boss_word_warn.wav 추가 후 SFX_FILES에 등록하면 재생됨
   playSfx("boss_word_warn");
 
-  // 3초 동안 유지 (실제 변경 시 clearBossWordWarningElements로 즉시 제거)
+  // 3초 동안 유지 (실제 변경 시 clearBossWordWarningElements로 즉시 숨김)
   raidBossWordWarnTimer=setPausableTimeout(()=>{
-    if(warn.parentElement) warn.remove();
+    if(raidBoss?.wordWarnEl===warn){
+      warn.classList.remove("is-visible","is-imminent");
+      warn.textContent="";
+    }
     raidBossWordWarnTimer=null;
   },RAID_WORD_WARN_AHEAD_MS);
 }
 
+/** 실제 단어 변경 순간 보스 부착 안내 (createEffect 대체, 850ms) */
+function showRaidBossWordChangedAlert(){
+  if(!raidBoss||!raidBoss.body) return;
+
+  bindRaidBossWordChrome(raidBoss.body);
+  const warn=raidBoss.wordWarnEl;
+  if(!warn) return;
+
+  clearBossWordWarnTimer();
+
+  warn.textContent="단어 변경!";
+  warn.classList.remove("is-imminent");
+  warn.classList.add("is-visible","is-changed");
+  // CSS anim 재시작 (변경 순간 1회)
+  void warn.offsetWidth;
+
+  raidBossWordWarnTimer=setPausableTimeout(()=>{
+    if(raidBoss?.wordWarnEl===warn){
+      warn.classList.remove("is-visible","is-changed");
+      warn.textContent="";
+    }
+    raidBossWordWarnTimer=null;
+  },850);
+}
+
 function playBossWordSwitchEffect(){
-  const word=getRaidBossHudElements()?.word||raidBoss?.hud?.querySelector(".raid-word");
+  const word=raidBoss?.wordLabelEl;
   if(word){
     word.classList.remove("raid-word-switch-pulse");
     void word.offsetWidth;
@@ -5904,7 +6845,6 @@ function playBossWordSwitchEffect(){
     },380);
   }
 
-  // SFX: sounds/boss_word_switch.wav 추가 후 SFX_FILES에 등록하면 재생됨
   playSfx("boss_word_switch");
 }
 
@@ -6222,8 +7162,9 @@ function processRaidControlPlants(cells,now){
       const durationMs=data.special.duration*1000;
       raidBoss.slowedUntil=Math.max(raidBoss.slowedUntil||0,now+durationMs);
 
-      // visual: 전역 wave만 (boss 개별 slow visual 없음). gameplay와 분리.
+      // visual: 전역 wave + DOM 발동 문구 (boss 개별 slow visual 없음). gameplay와 분리.
       spawnBackVowelGlobalWaveCue(420);
+      showGlobalCastAnnouncement("후설모음 발동!","back");
       updateRaidBossStatusVisuals(now);
     }
 
@@ -6236,6 +7177,7 @@ function processRaidControlPlants(cells,now){
       updateRaidBossStatusVisuals(now);
 
       createGlobalFreezeScreen();
+      showGlobalCastAnnouncement("전설모음 발동!","front");
       createEffect(
         "❄ 보스 완전 정지!",
         column*CELL_SIZE+5,
@@ -6336,8 +7278,9 @@ function processGlobalSlowPlants(cells,now){
   const durationSec=data.special.duration;
   const multiplier=data.special.multiplier;
   let castApplied=false;
-  let lastTargetsLen=0;
+  let targets=null;
 
+  // 1) 발동할 후설모음 확인 + 식물별 cooldown 소비 (slow write는 아직 안 함)
   for(let index=0;index<cells.length;index++){
     const cell=cells[index];
     if(cell.dataset.plantType!=="후설모음")continue;
@@ -6346,35 +7289,37 @@ function processGlobalSlowPlants(cells,now){
     // 발동 조건: 보드 안 후설모음 적 존재 (기존과 동일)
     if(!hasAliveOnBoardWithFeature(feature))continue;
 
-    // gameplay: 생존 적 전체 (접근 구간 포함) — "모든 적" 둔화. VFX와 독립.
-    const targets=getFrameAliveZombies();
+    if(!targets){
+      targets=getFrameAliveZombies();
+    }
     if(!targets.length)continue;
 
+    // 동시 발동해도 각 식물 cooldown은 각각 소비
     cell.dataset.lastSupportTime=now;
-    lastTargetsLen=targets.length;
-
-    for(let i=0;i<targets.length;i++){
-      const target=targets[i];
-      if(!target||!target.alive)continue;
-      const statusMult=typeof target.statusDurationMultiplier==="number"
-        ?target.statusDurationMultiplier
-        :1;
-      const durationMs=durationSec*statusMult*1000;
-      target.slowedUntil=Math.max(target.slowedUntil||0,now+durationMs);
-      target.slowMultiplier=Math.min(
-        typeof target.slowMultiplier==="number"?target.slowMultiplier:1,
-        multiplier
-      );
-    }
-
     castApplied=true;
   }
 
-  // visual: gameplay 성공 후에만 (없어도 slow 상태는 이미 적용됨)
-  if(castApplied){
-    spawnBackVowelGlobalWaveCue(420);
-    beginSlowCastPerfProbe(lastTargetsLen,{castDom:0});
+  if(!castApplied||!targets||!targets.length)return;
+
+  // 2) 동일 프레임 slow 상태 적용은 alive 목록에 1회만 (P×A → A)
+  for(let i=0;i<targets.length;i++){
+    const target=targets[i];
+    if(!target||!target.alive)continue;
+    const statusMult=typeof target.statusDurationMultiplier==="number"
+      ?target.statusDurationMultiplier
+      :1;
+    const durationMs=durationSec*statusMult*1000;
+    target.slowedUntil=Math.max(target.slowedUntil||0,now+durationMs);
+    target.slowMultiplier=Math.min(
+      typeof target.slowMultiplier==="number"?target.slowMultiplier:1,
+      multiplier
+    );
   }
+
+  // 3) VFX: 동일 프레임 1회 (기존 Wave 구조 유지)
+  spawnBackVowelGlobalWaveCue(420);
+  showGlobalCastAnnouncement("후설모음 발동!","back");
+  beginSlowCastPerfProbe(targets.length,{castDom:0});
 }
 function processGlobalFreezePlants(cells,now){
   if(raidMode)return;
@@ -6388,6 +7333,7 @@ function processGlobalFreezePlants(cells,now){
     if(!targets.length)return;
     cell.dataset.lastSupportTime=now;
     createGlobalFreezeScreen();
+    showGlobalCastAnnouncement("전설모음 발동!","front");
     targets.forEach(target=>{
       const duration=data.special.duration*target.statusDurationMultiplier;
       target.frozenUntil=Math.max(target.frozenUntil,now+duration*1000);
@@ -6529,11 +7475,6 @@ function performRaidBossAttack(cells,now){
 
     updatePlantHPBar(cell);
 
-    createPlantDamageNumber(
-      index,
-      damage
-    );
-
     const column=
       index%BOARD_COLUMNS;
 
@@ -6546,9 +7487,11 @@ function performRaidBossAttack(cells,now){
     );
 
     if(hp<=0){
+      // shockwave 사망: exit ghost·floating damage number 생략 (HP bar·cleanup·bounce 유지)
       removePlantFromCell(
         cell,
-        false
+        false,
+        {skipExitGhost:true}
       );
     }
   });
@@ -6982,6 +7925,8 @@ function startRaid(){
   ensureRaidBossVisual();
   startRaidBossEntrance();
 
+  markBossRaidEntered();
+
   waveDisplay.textContent="BOSS";
 
   changeRaidBossWord(now);
@@ -7005,6 +7950,84 @@ function formatClearTime(totalSeconds){
     totalSeconds%60;
 
   return `${minutes}:${String(seconds).padStart(2,"0")}`;
+}
+
+function resetBossResultState(){
+  bossResultState={
+    entered:false,
+    maxHp:RAID_CONFIG.maxHp,
+    remainingHp:RAID_CONFIG.maxHp,
+    snapshotTaken:false
+  };
+}
+
+function markBossRaidEntered(){
+  bossResultState.entered=true;
+  bossResultState.maxHp=RAID_CONFIG.maxHp;
+  bossResultState.remainingHp=RAID_CONFIG.maxHp;
+  bossResultState.snapshotTaken=false;
+}
+
+function snapshotBossResultHp(remainingHp){
+  if(!bossResultState.entered) return;
+  const maxHp=bossResultState.maxHp||RAID_CONFIG.maxHp;
+  let hp=remainingHp;
+  if(typeof hp!=="number"||!Number.isFinite(hp)){
+    hp=raidBoss&&typeof raidBoss.hp==="number"
+      ?raidBoss.hp
+      :bossResultState.remainingHp;
+  }
+  bossResultState.maxHp=maxHp;
+  bossResultState.remainingHp=Math.max(0,Math.min(maxHp,hp));
+  bossResultState.snapshotTaken=true;
+}
+
+/** 결과 시점 1회용 보스 피해 점수 데이터 (hit마다 score 변경 없음) */
+function getBossDamageScoreData(){
+  const maxHp=bossResultState.maxHp||RAID_CONFIG.maxHp;
+  const entered=!!bossResultState.entered;
+
+  if(!entered){
+    return {
+      entered:false,
+      maxHp,
+      remainingHp:maxHp,
+      damage:0,
+      ratio:0,
+      bonus:0,
+      bossEntered:false,
+      bossDamage:0,
+      bossRemainingHp:maxHp,
+      bossDamageRatio:0,
+      bossDamageBonus:0
+    };
+  }
+
+  let remainingHp=bossResultState.remainingHp;
+  if(!bossResultState.snapshotTaken&&raidBoss&&typeof raidBoss.hp==="number"){
+    remainingHp=raidBoss.hp;
+  }
+  remainingHp=Math.max(0,Math.min(maxHp,remainingHp));
+
+  const damage=maxHp-remainingHp;
+  const ratio=maxHp>0
+    ?Math.max(0,Math.min(1,damage/maxHp))
+    :0;
+  const bonus=Math.round(ratio*FINAL_SCORE_CONFIG.maxBossDamageBonus);
+
+  return {
+    entered:true,
+    maxHp,
+    remainingHp,
+    damage,
+    ratio,
+    bonus,
+    bossEntered:true,
+    bossDamage:damage,
+    bossRemainingHp:remainingHp,
+    bossDamageRatio:ratio,
+    bossDamageBonus:bonus
+  };
 }
 
 function calculateFinalScoreBreakdown(){
@@ -7046,24 +8069,44 @@ function calculateFinalScoreBreakdown(){
       )
     );
 
-  const baseScore=
-    score;
+  const bossData=getBossDamageScoreData();
+  const bossDamageBonus=bossData.bonus;
+  const clearBonus=FINAL_SCORE_CONFIG.clearBonus;
+  const baseScore=score;
 
   const finalScore=
     baseScore+
+    bossDamageBonus+
+    clearBonus+
     timeBonus+
     energyBonus;
 
   return {
     baseScore,
+    bossDamageBonus,
+    clearBonus,
     clearSeconds,
     timeBonus,
     energyBonus,
-    finalScore
+    finalScore,
+    bossEntered:bossData.bossEntered,
+    bossDamage:bossData.bossDamage,
+    bossRemainingHp:bossData.bossRemainingHp,
+    bossDamageRatio:bossData.bossDamageRatio
   };
 }
 
 function getFinalScoreBreakdownHTML(result){
+  const bossLine=result.bossEntered
+    ? `<div style="color:#111;">
+        보스 피해 보너스
+        <strong style="color:#111;">+${result.bossDamageBonus.toLocaleString()}</strong>
+        <span style="font-weight:600;opacity:.75;">
+          (${Math.round((result.bossDamageRatio||0)*100)}%)
+        </span>
+      </div>`
+    : "";
+
   return `
     <div
       id="final-score-breakdown"
@@ -7087,6 +8130,13 @@ function getFinalScoreBreakdownHTML(result){
       <div style="color:#111;">
         기본 점수
         <strong style="color:#111;">${result.baseScore.toLocaleString()}</strong>
+      </div>
+
+      ${bossLine}
+
+      <div style="color:#111;">
+        클리어 보너스
+        <strong style="color:#111;">+${(result.clearBonus||0).toLocaleString()}</strong>
       </div>
 
       <div style="color:#111;">
@@ -7136,6 +8186,236 @@ function applyFinalClearScore(){
   return result;
 }
 
+/** 게임오버: base + bossDamageBonus 만 (time/energy/clear 없음) */
+function applyGameOverBossScore(){
+  if(finalScoreCalculated){
+    return null;
+  }
+
+  finalScoreCalculated=true;
+
+  const bossData=getBossDamageScoreData();
+  const baseScore=score;
+  const bossDamageBonus=bossData.bonus;
+  const finalScore=baseScore+bossDamageBonus;
+
+  score=finalScore;
+  scoreDisplay.textContent=score;
+
+  return {
+    baseScore,
+    bossDamageBonus,
+    clearBonus:0,
+    timeBonus:0,
+    energyBonus:0,
+    finalScore,
+    bossEntered:bossData.bossEntered,
+    bossDamage:bossData.bossDamage,
+    bossRemainingHp:bossData.bossRemainingHp,
+    bossDamageRatio:bossData.bossDamageRatio
+  };
+}
+
+/** 종료 직후 1회 — submit은 이 snapshot만 사용 */
+function buildFinalResultData(resultType){
+  const bossData=getBossDamageScoreData();
+  const playTime=Math.max(
+    0,
+    Math.floor((nowGame()-gameStartTime)/1000)
+  );
+
+  finalResultData={
+    result:resultType==="clear"?"clear":"gameover",
+    finalScore:score,
+    reachedWave:currentWave,
+    kills:killCount,
+    bossEntered:!!bossData.bossEntered,
+    bossDamage:bossData.bossDamage|0,
+    bossRemainingHp:bossData.bossRemainingHp|0,
+    playTime,
+    testMode:!!scoreSubmissionTestMode
+  };
+
+  scoreSubmitInFlight=false;
+  scoreSubmitSucceeded=false;
+  return finalResultData;
+}
+
+function ensureScoreSubmitPanel(){
+  let panel=document.getElementById("score-submit-panel");
+  if(panel) return panel;
+  if(!unlockNextButton||!unlockNextButton.parentElement) return null;
+
+  panel=document.createElement("div");
+  panel.id="score-submit-panel";
+  panel.className="score-submit-panel";
+  unlockNextButton.parentElement.insertBefore(panel,unlockNextButton);
+  return panel;
+}
+
+function renderScoreSubmitPanel(){
+  const panel=ensureScoreSubmitPanel();
+  if(!panel) return;
+
+  const isTest=
+    !!(finalResultData&&finalResultData.testMode)||
+    !!scoreSubmissionTestMode;
+
+  if(isTest){
+    panel.innerHTML=
+      '<p class="score-submit-test-note">TEST 모드에서는 점수를 제출할 수 없습니다.</p>';
+    panel.hidden=false;
+    return;
+  }
+
+  if(!finalResultData){
+    panel.innerHTML="";
+    panel.hidden=true;
+    return;
+  }
+
+  const disabled=
+    scoreSubmitInFlight||scoreSubmitSucceeded
+      ?" disabled"
+      :"";
+  const statusText=scoreSubmitSucceeded
+    ?"제출 완료!"
+    :"";
+
+  panel.innerHTML=
+    '<label class="score-submit-label" for="score-submit-name">'+
+      "점수 제출"+
+    "</label>"+
+    '<input'+
+      ' id="score-submit-name"'+
+      ' class="score-submit-name"'+
+      ' type="text"'+
+      ' maxlength="40"'+
+      ' autocomplete="name"'+
+      ' placeholder="학번+이름을 입력하세요 (예: 31215 홍길동)"'+
+      (scoreSubmitSucceeded?" disabled":"")+
+    ">"+
+    '<button'+
+      ' type="button"'+
+      ' id="score-submit-button"'+
+      ' class="score-submit-button"'+
+      disabled+
+    ">"+
+      (scoreSubmitSucceeded?"제출 완료":"점수 제출")+
+    "</button>"+
+    '<p id="score-submit-status" class="score-submit-status" aria-live="polite">'+
+      statusText+
+    "</p>";
+
+  panel.hidden=false;
+
+  const button=panel.querySelector("#score-submit-button");
+  if(button&&!scoreSubmitSucceeded){
+    button.addEventListener("click",()=>{
+      playSfx("click_ui");
+      submitScore();
+    });
+  }
+}
+
+function setScoreSubmitStatus(message,kind){
+  const status=document.getElementById("score-submit-status");
+  if(!status) return;
+  status.textContent=message||"";
+  status.classList.remove(
+    "is-pending",
+    "is-success",
+    "is-error"
+  );
+  if(kind) status.classList.add(kind);
+}
+
+async function submitScore(){
+  if(scoreSubmissionTestMode||(finalResultData&&finalResultData.testMode)){
+    return;
+  }
+  if(!finalResultData) return;
+  if(scoreSubmitInFlight||scoreSubmitSucceeded) return;
+
+  const nameInput=document.getElementById("score-submit-name");
+  const button=document.getElementById("score-submit-button");
+  const name=nameInput
+    ?String(nameInput.value||"").trim()
+    :"";
+
+  if(!name){
+    setScoreSubmitStatus(
+      "학번+이름을 입력해 주세요.",
+      "is-error"
+    );
+    if(nameInput) nameInput.focus();
+    return;
+  }
+
+  scoreSubmitInFlight=true;
+  if(button) button.disabled=true;
+  if(nameInput) nameInput.disabled=true;
+  setScoreSubmitStatus("제출 중…","is-pending");
+
+  const payload={
+    name,
+    score:finalResultData.finalScore,
+    result:finalResultData.result,
+    wave:finalResultData.reachedWave,
+    kills:finalResultData.kills,
+    bossEntered:finalResultData.bossEntered,
+    bossDamage:finalResultData.bossDamage,
+    bossRemainingHp:finalResultData.bossRemainingHp,
+    playTime:finalResultData.playTime,
+    testMode:finalResultData.testMode
+  };
+
+  try{
+    const response=await fetch(SCORE_SUBMIT_URL,{
+      method:"POST",
+      headers:{
+        "Content-Type":"text/plain;charset=utf-8"
+      },
+      body:JSON.stringify(payload)
+    });
+
+    let data=null;
+    try{
+      data=await response.json();
+    }catch(_err){
+      data=null;
+    }
+
+    if(data&&data.ok===true){
+      scoreSubmitSucceeded=true;
+      scoreSubmitInFlight=false;
+      setScoreSubmitStatus("제출 완료!","is-success");
+      if(button){
+        button.disabled=true;
+        button.textContent="제출 완료";
+      }
+      return;
+    }
+
+    const errMsg=
+      data&&data.error
+        ?String(data.error)
+        :"제출에 실패했습니다. 다시 시도해 주세요.";
+    scoreSubmitInFlight=false;
+    if(button) button.disabled=false;
+    if(nameInput) nameInput.disabled=false;
+    setScoreSubmitStatus(errMsg,"is-error");
+  }catch(_err){
+    scoreSubmitInFlight=false;
+    if(button) button.disabled=false;
+    if(nameInput) nameInput.disabled=false;
+    setScoreSubmitStatus(
+      "제출에 실패했습니다. 다시 시도해 주세요.",
+      "is-error"
+    );
+  }
+}
+
 
 function finishRaid(){
   if(!raidMode||!raidBoss)return;
@@ -7163,6 +8443,9 @@ function finishRaid(){
   stopBossBgm();
   updatePauseUI();
 
+  // 처치: remainingHp=0 snapshot (overkill clamp는 helper에서)
+  snapshotBossResultHp(0);
+
   if(raidBoss.body&&raidBoss.body.parentElement)raidBoss.body.remove();
   detachRaidBossHud();
   raidBoss=null;
@@ -7172,8 +8455,6 @@ function finishRaid(){
     return;
   }
 
-  score+=3000;
-  scoreDisplay.textContent=score;
   finishGame();
 }
 
@@ -7273,24 +8554,29 @@ function gameLoop(currentTime){
       let _labelCost=0;
       zombies.forEach(zombie=>{
         if(!zombie.alive)return;let delta=(now-zombie.lastUpdateTime)/1000;delta=Math.min(delta,0.1);zombie.lastUpdateTime=now;
-        // Canvas status VFX: frozen DOM class 미사용. 후설모음 .slowed class도 미사용.
+        // Canvas status VFX: frozen DOM class 미사용. .slowed class 경로 없음.
         // 판정값 frozenUntil/slowedUntil/slowMultiplier는 그대로 유지
         if(zombie.canvasRender&&useCanvasStatusVfx()){
           if(zombie.slowedUntil<=now)zombie.slowMultiplier=1;
           const el=zombie.element;
-          if(el&&(el.classList.contains("frozen")||el.classList.contains("slowed"))){
-            el.classList.remove("frozen","slowed");
+          if(el&&el.classList.contains("frozen")){
+            el.classList.remove("frozen");
           }
         }else{
           zombie.element.classList.toggle("frozen",zombie.frozenUntil>now);
-          // 후설모음: .slowed class churn 제거 (이속은 slowedUntil/slowMultiplier로만)
-          if(zombie.element.classList.contains("slowed"))zombie.element.classList.remove("slowed");
           if(zombie.slowedUntil<=now)zombie.slowMultiplier=1;
         }
         const cellIndex=getZombieCellIndex(zombie);
         let currentCell=cellIndex>=0?cells[cellIndex]:null;
 
-        if(currentCell&&currentCell.dataset.plant==="true"){
+        // W7+: runner는 평순모음만 공격하지 않고 통과 (다른 식물·적 타입은 기존 충돌)
+        const runnerPassesUnrounded=
+          zombie.enemyType==="runner"&&
+          currentWave>=7&&
+          !!currentCell&&
+          currentCell.dataset.plantType==="평순모음";
+
+        if(currentCell&&currentCell.dataset.plant==="true"&&!runnerPassesUnrounded){
           // 실제 충돌 좌표(zombie.x)는 그대로 유지하고,
           // 공격 중인 좀비 그림만 오른쪽으로 조금 물려서 식물과 겹치지 않게 한다.
           zombie.element.classList.add("attacking-plant");
@@ -7517,7 +8803,28 @@ function checkWaveEnd(){score+=500;scoreDisplay.textContent=score;if(currentWave
 
 function getMissedWordSummary(){const counts={};missedWords.forEach(word=>counts[word]=(counts[word]||0)+1);return Object.entries(counts).sort((a,b)=>b[1]-a[1]);}
 function getMissedFeatureRanking(){return Object.entries(missedFeatureCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);}
-function getMostUsedPlant(){const entries=Object.entries(plantPlacementCounts);if(!entries.length)return null;entries.sort((a,b)=>b[1]-a[1]);return entries[0];}
+function getTopPlacedPlants(limit=4){
+  const max=Math.max(0, Number(limit)||0);
+  return Object.entries(plantPlacementCounts)
+    .filter(([type,count])=>
+      count>0 &&
+      type!=="에너지식물" &&
+      unlockedPlants.has(type) &&
+      (CONSONANT_PLANTS.has(type)||VOWEL_PLANTS.has(type))
+    )
+    .map(([type,count])=>({type,count}))
+    .sort((a,b)=>{
+      if(b.count!==a.count) return b.count-a.count;
+      return (SIDEBAR_PLANT_ORDER_INDEX.get(a.type)??999)-(SIDEBAR_PLANT_ORDER_INDEX.get(b.type)??999);
+    })
+    .slice(0,max);
+}
+
+function getMostUsedPlant(){
+  const top=getTopPlacedPlants(1);
+  if(!top.length) return null;
+  return [top[0].type, top[0].count];
+}
 function buildGameFeedbackHTML(cleared=false){
   const missedWordSummary=getMissedWordSummary(),featureRanking=getMissedFeatureRanking(),mostUsedPlant=getMostUsedPlant();
   const missedWordsHTML=!missedWordSummary.length?`<p><strong>없음</strong></p><p>🎯 이번 판에서는 방어선을 통과한 단어가 없습니다.</p>`:`<p>${missedWordSummary.map(([word,count])=>count>1?`${word} ×${count}`:word).join(" · ")}</p>`;
@@ -7530,41 +8837,31 @@ function buildGameFeedbackHTML(cleared=false){
 function startTutorial(){
   practiceMode=false;if(practiceToolbar)practiceToolbar.classList.add("hidden");if(practicePanel)practicePanel.classList.add("hidden");
   clearTutorialGuide();
+  resetTutorialProgressState();
   forceUnpauseGame();
+  clearWaveSpawnSchedule();
   startOverlay.classList.add("hidden");tutorialMode=true;raidMode=false;gameOver=false;waveInProgress=true;tutorialSpawnIndex=0;tutorialEnergyBonusGiven=false;resolvedZombies=0;waveZombieCount=TUTORIAL_CONFIG.zombieCount;energy=130;life=5;score=0;energyDisplay.textContent=energy;lifeDisplay.textContent=life;scoreDisplay.textContent=score;waveDisplay.textContent="T";unlockedPlants=new Set(["양순음","치조음"]);updatePlantButtons();createBoard();tutorialGuide.classList.remove("hidden");tutorialGuideText.innerHTML=`튜토리얼을 시작합니다.<br><br>식물 버튼을 선택한 뒤 게임판의 원하는 칸을 클릭하면 식물을 배치할 수 있습니다.<br><br>잠시 후 첫 번째 단어가 등장합니다.`;
   setPausableTimeout(()=>{
     if(!tutorialMode)return;
     spawnTutorialZombie();
-    currentSpawnTimer=setInterval(()=>{
-      if(isPaused)return;
-      if(!tutorialMode){
-        clearInterval(currentSpawnTimer);
-        currentSpawnTimer=null;
-        return;
-      }
-      if(tutorialSpawnIndex>=TUTORIAL_CONFIG.zombieCount){
-        clearInterval(currentSpawnTimer);
-        currentSpawnTimer=null;
-        return;
-      }
-      spawnTutorialZombie();
-    },TUTORIAL_CONFIG.spawnInterval);
   },3000);
   updatePauseUI();
 }
 function finishTutorial(){
   forceUnpauseGame();
   clearTutorialGuide();
-  if(currentSpawnTimer){clearInterval(currentSpawnTimer);currentSpawnTimer=null;}tutorialGuide.classList.add("hidden");unlockTitle.textContent="🎓 튜토리얼 완료!";unlockContent.innerHTML=`<p>기본적인 방어 방법을 익혔습니다.</p><p>본게임에서는 단어에 포함된 음운의 특징을 직접 판단해 식물을 선택해야 합니다.</p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="Wave 1 시작";unlockNextButton.dataset.action="start-main";delete unlockNextButton.dataset.wave;unlockOverlay.classList.remove("hidden");
+  resetTutorialProgressState();
+  clearWaveSpawnSchedule();tutorialGuide.classList.add("hidden");unlockTitle.textContent="🎓 튜토리얼 완료!";unlockContent.innerHTML=`<p>기본적인 방어 방법을 익혔습니다.</p><p>본게임에서는 단어에 포함된 음운의 특징을 직접 판단해 식물을 선택해야 합니다.</p>`;unlockNextButton.style.display="inline-block";unlockNextButton.textContent="Wave 1 시작";unlockNextButton.dataset.action="start-main";delete unlockNextButton.dataset.wave;unlockOverlay.classList.remove("hidden");
   updatePauseUI();
 }
-function resetForMainGame(){gameStartTime=nowGame();finalScoreCalculated=false;resultScreenMode=null;
+function resetForMainGame(){gameStartTime=nowGame();finalScoreCalculated=false;resultScreenMode=null;resetBossResultState();killCount=0;scoreSubmissionTestMode=false;finalResultData=null;scoreSubmitInFlight=false;scoreSubmitSucceeded=false;
   forceUnpauseGame();
   practiceMode=false;
   clearTutorialGuide();
+  resetTutorialProgressState();
   if(practiceToolbar) practiceToolbar.classList.add("hidden");
   if(practicePanel) practicePanel.classList.add("hidden");
-  if(currentSpawnTimer){clearInterval(currentSpawnTimer);currentSpawnTimer=null;}zombies.forEach(z=>{z.alive=false;if(z.element.parentElement)z.element.remove();});zombies=[];if(raidBoss){if(raidBoss.body&&raidBoss.body.parentElement)raidBoss.body.remove();detachRaidBossHud();}raidBoss=null;raidMode=false;updateRaidRefundUI();raidWordBag=[];raidLastWordId=null;raidLiquidResonance=0;tutorialMode=false;tutorialSpawnIndex=0;tutorialEnergyBonusGiven=false;tutorialGuide.classList.add("hidden");selectedPlant=null;selectedCost=0;removeMode=false;energy=350;life=5;score=0;currentWave=1;waveZombieCount=0;resolvedZombies=0;waveInProgress=false;gameOver=false;waveWordBag=[];waveEnemyTypeBag=[];lastSpawnedWordId=null;missedWords=[];missedFeatureCounts={};plantPlacementCounts={};unlockedPlants=new Set(INITIAL_PLANTS);energyDisplay.textContent=energy;lifeDisplay.textContent=life;scoreDisplay.textContent=score;waveDisplay.textContent=currentWave;restartButton.style.display="none";removeButton.disabled=false;removeButton.classList.remove("selected");plantButtons.forEach(button=>button.classList.remove("selected"));if(plantInfoContent)plantInfoContent.innerHTML=`식물을 선택하면 역할과 효과가 표시됩니다.`;setPlantInfoPanelActive(false);updatePlantButtons();createBoard();
+  clearWaveSpawnSchedule();pendingWaveWordPoolClone=null;zombies.forEach(z=>{z.alive=false;if(z.element.parentElement)z.element.remove();});zombies=[];if(raidBoss){if(raidBoss.body&&raidBoss.body.parentElement)raidBoss.body.remove();detachRaidBossHud();}raidBoss=null;raidMode=false;updateRaidRefundUI();raidWordBag=[];raidLastWordId=null;raidLiquidResonance=0;tutorialMode=false;tutorialSpawnIndex=0;tutorialEnergyBonusGiven=false;tutorialGuide.classList.add("hidden");selectedPlant=null;selectedCost=0;lastPlantSelectSource="canonical";removeMode=false;energy=350;life=5;score=0;currentWave=1;waveZombieCount=0;resolvedZombies=0;waveInProgress=false;gameOver=false;waveWordBag=[];waveEnemyTypeBag=[];lastSpawnedWordId=null;missedWords=[];missedFeatureCounts={};plantPlacementCounts={};unlockedPlants=new Set(INITIAL_PLANTS);energyDisplay.textContent=energy;lifeDisplay.textContent=life;scoreDisplay.textContent=score;waveDisplay.textContent=currentWave;restartButton.style.display="none";removeButton.disabled=false;removeButton.classList.remove("selected");plantButtons.forEach(button=>button.classList.remove("selected"));if(plantInfoContent)plantInfoContent.innerHTML=`식물을 선택하면 역할과 효과가 표시됩니다.`;setPlantInfoPanelActive(false);updatePlantButtons();updateMostUsedPlantsUI();createBoard();
 }
 
 function ensurePracticeModeUI(){
@@ -7685,6 +8982,7 @@ function ensurePracticeModeUI(){
 
 function applyPracticeSetup(){
   practiceMode=true;
+  scoreSubmissionTestMode=true;
   tutorialMode=false;
   gameOver=false;
 
@@ -7759,10 +9057,7 @@ function spawnPracticeEnemy(enemyType){
 }
 
 function clearPracticeEnemies(){
-  if(currentSpawnTimer){
-    clearInterval(currentSpawnTimer);
-    currentSpawnTimer=null;
-  }
+  clearWaveSpawnSchedule();
 
   zombies.forEach(zombie=>{
     zombie.alive=false;
@@ -7779,10 +9074,7 @@ function clearPracticeEnemies(){
 function stopPracticeCombat(){
   if(!practiceMode)return;
 
-  if(currentSpawnTimer){
-    clearInterval(currentSpawnTimer);
-    currentSpawnTimer=null;
-  }
+  clearWaveSpawnSchedule();
 
   zombies.forEach(zombie=>{
     zombie.alive=false;
@@ -7889,6 +9181,7 @@ function startRaidTest(){gameStartTime=nowGame();finalScoreCalculated=false;
   unlockOverlay.classList.add("hidden");
 
   resetForMainGame();
+  scoreSubmissionTestMode=true;
 
   currentWave=9;
   waveDisplay.textContent="FINAL";
@@ -8100,17 +9393,85 @@ if(!window.__phonemeDevTestCommandBound){
   window.addEventListener("keydown", onDevTestCommandKeydown);
 }
 
+/* 모바일: 시작 화면 로고 영역 2초 내 5탭 → 기존 openDevTestMenu (PC pointer fine 제외) */
+const DEV_TEST_LOGO_TAP_COUNT = 5;
+const DEV_TEST_LOGO_TAP_WINDOW_MS = 2000;
+let devTestLogoTapCount = 0;
+let devTestLogoTapTimer = null;
+
+function resetDevTestLogoTaps(){
+  devTestLogoTapCount = 0;
+  if(devTestLogoTapTimer){
+    clearTimeout(devTestLogoTapTimer);
+    devTestLogoTapTimer = null;
+  }
+}
+
+function isCoarsePointerDevice(){
+  try{
+    return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+  }catch(_err){
+    return false;
+  }
+}
+
+function isStartLogoTapHit(event){
+  if(!startOverlay) return false;
+  const logo = startOverlay.querySelector(".start-brand-logo");
+  if(!logo) return false;
+  if(event.target && event.target.closest){
+    if(event.target.closest("button")) return false;
+    if(event.target.closest(".start-buttons")) return false;
+  }
+  const r = logo.getBoundingClientRect();
+  const x = event.clientX;
+  const y = event.clientY;
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
+function onDevTestLogoPointerDown(event){
+  if(!isCoarsePointerDevice()) return;
+  if(!isStartScreenVisible()){
+    resetDevTestLogoTaps();
+    return;
+  }
+  if(devTestMenu && !devTestMenu.classList.contains("hidden")){
+    resetDevTestLogoTaps();
+    return;
+  }
+  if(!isStartLogoTapHit(event)) return;
+
+  devTestLogoTapCount += 1;
+  if(devTestLogoTapTimer) clearTimeout(devTestLogoTapTimer);
+  devTestLogoTapTimer = setTimeout(
+    resetDevTestLogoTaps,
+    DEV_TEST_LOGO_TAP_WINDOW_MS
+  );
+
+  if(devTestLogoTapCount >= DEV_TEST_LOGO_TAP_COUNT){
+    resetDevTestLogoTaps();
+    openDevTestMenu();
+  }
+}
+
+if(!window.__phonemeDevTestLogoTapBound && startOverlay){
+  window.__phonemeDevTestLogoTapBound = true;
+  startOverlay.addEventListener("pointerdown", onDevTestLogoPointerDown);
+}
+
 function showNextWavePopup(nextWave){
   forceUnpauseGame();
   updatePauseUI();
   const newPlants=WAVE_UNLOCKS[nextWave]||[];newPlants.forEach(type=>unlockedPlants.add(type));updatePlantButtons();unlockNextButton.style.display="inline-block";unlockNextButton.dataset.action="next-wave";let plantHTML="";
   if(newPlants.length)plantHTML=newPlants.map(buildUnlockPlantHTML).join("");
-  if(nextWave===7){unlockTitle.textContent="⚠ 새로운 적 등장!";unlockContent.innerHTML=`${plantHTML}<hr><h3>⚠ 특수 단어 몬스터 등장</h3><p>이제부터 일부 적은 특별한 능력을 가지고 등장합니다.</p><p>🏃 <strong>돌진형</strong><br>빠른 속도로 방어선에 접근합니다.</p><p>💢 <strong>파괴형</strong><br>느리지만 매우 단단하고 식물에게 큰 피해를 줍니다.</p><p>🛡 <strong>불굴형</strong><br>높은 체력을 가지고 있으며 둔화와 빙결에서 매우 빠르게 회복합니다.</p><p>💣 <strong>폭발형</strong><br>쓰러질 때 주변 식물에 강력한 폭발 피해를 줍니다.<br><strong>가능한 한 방어선에서 멀리 처치하세요.</strong></p><p>이제부터는 단어의 음운뿐 아니라 <strong>적 종류와 처치 위치</strong>도 중요합니다.</p>`;}
+  if(nextWave===7){unlockTitle.textContent="⚠ 새로운 적 등장!";unlockContent.innerHTML=`${plantHTML}<hr><h3>⚠ 특수 단어 몬스터 등장</h3><p>이제부터 일부 적은 특별한 능력을 가지고 등장합니다.</p><p>🏃 <strong>돌진형</strong><br>빠른 속도로 방어선에 접근합니다.<br>돌진형 좀비는 평순모음을 공격하지 않고 지나갑니다.</p><p>💢 <strong>파괴형</strong><br>느리지만 매우 단단하고 식물에게 큰 피해를 줍니다.</p><p>🛡 <strong>불굴형</strong><br>높은 체력을 가지고 있으며 둔화와 빙결에서 매우 빠르게 회복합니다.</p><p>💣 <strong>폭발형</strong><br>쓰러질 때 주변 식물에 강력한 폭발 피해를 줍니다.<br><strong>가능한 한 방어선에서 멀리 처치하세요.</strong></p><p>이제부터는 단어의 음운뿐 아니라 <strong>적 종류와 처치 위치</strong>도 중요합니다.</p>`;}
   else if(nextWave===8){unlockTitle.textContent="🌱 마지막 식물 해금!";unlockContent.innerHTML=`${plantHTML}<hr><p>이제 모든 음운 식물을 사용할 수 있습니다.</p><p>특수 적이 더욱 자주 등장합니다.</p><p>특히 💣 폭발형을 방어선 가까이에서 처치하면 진형이 크게 손상될 수 있습니다.</p>`;}
   else if(nextWave===9){unlockTitle.textContent="🚨 FINAL WAVE";unlockContent.innerHTML=`<h2>FINAL WAVE</h2><p>새로운 식물은 없습니다.</p><p>지금까지 익힌 <strong>음운 체계와 모든 배치 전략</strong>을 활용하세요.</p><p>🏃 돌진형, 💢 파괴형, 🛡 불굴형, 💣 폭발형이 대규모로 함께 등장합니다.</p><p>무너진 진형은 소리씨앗을 활용해 빠르게 복구하세요.</p>`;}
   else if(newPlants.length){unlockTitle.textContent="🌱 새로운 식물 발견!";unlockContent.innerHTML=plantHTML;}
   else{unlockTitle.textContent="⚔ 다음 Wave";unlockContent.innerHTML=`<p>지금까지 해금한 식물을 조합해 방어하세요.</p>`;}
   unlockNextButton.textContent=nextWave===9?"FINAL WAVE 시작":`Wave ${nextWave} 시작`;unlockNextButton.dataset.wave=nextWave;unlockOverlay.classList.remove("hidden");playSfx("wave_start");
+  // 학생이 팝업을 읽는 동안 다음 Wave word pool 배열만 미리 clone (RNG shuffle은 시작 시)
+  prepareNextWaveWordPoolClone(nextWave);
 }
 unlockNextButton.addEventListener("click",function(){
   playSfx("click_ui");
@@ -8138,8 +9499,45 @@ function startWave(){
   ){
     requestBattleBgm({restart:false});
   }
-  const config=WAVE_CONFIG[currentWave];if(!config)return;waveInProgress=true;resolvedZombies=0;waveZombieCount=config.zombieCount;waveWordBag=[];lastSpawnedWordId=null;buildEnemyTypeBag();waveDisplay.textContent=currentWave===9?"FINAL":currentWave;let spawned=0;spawnZombie();spawned++;currentSpawnTimer=setInterval(()=>{if(isPaused)return;if(gameOver||spawned>=waveZombieCount){clearInterval(currentSpawnTimer);currentSpawnTimer=null;return;}spawnZombie();spawned++;},config.spawnInterval);
+  const config=WAVE_CONFIG[currentWave];
+  if(!config)return;
+
+  clearWaveSpawnSchedule();
+
+  waveInProgress=true;
+  resolvedZombies=0;
+  waveZombieCount=config.zombieCount;
+  waveWordBag=[];
+  lastSpawnedWordId=null;
+  buildEnemyTypeBag();
+  waveDisplay.textContent=currentWave===9?"FINAL":currentWave;
   updatePauseUI();
+
+  // 첫 spawn은 다음 animation frame — overlay hide paint와 zombie DOM append 분리
+  let spawned=0;
+  const waveId=currentWave;
+  const spawnIntervalMs=config.spawnInterval;
+  pendingFirstSpawnRaf=requestAnimationFrame(()=>{
+    pendingFirstSpawnRaf=null;
+    if(gameOver||!waveInProgress||tutorialMode||raidMode||currentWave!==waveId)return;
+
+    spawnZombie({deferLabelBlur:true});
+    spawned++;
+
+    if(spawned>=waveZombieCount)return;
+
+    // interval은 첫 spawn 이후에 시작 → 2번째 좀비는 첫 spawn 기준 spawnInterval 유지
+    currentSpawnTimer=setInterval(()=>{
+      if(isPaused)return;
+      if(gameOver||!waveInProgress||spawned>=waveZombieCount){
+        clearInterval(currentSpawnTimer);
+        currentSpawnTimer=null;
+        return;
+      }
+      spawnZombie();
+      spawned++;
+    },spawnIntervalMs);
+  });
 }
 function removeEndIllustrationOverlay(){
   const existing=document.getElementById("end-illustration-overlay");
@@ -8165,6 +9563,8 @@ function showResultScreen(mode){
 
   // HUD의 별도 다시시작 버튼은 숨기고 결과창 하단 버튼만 사용
   restartButton.style.display="none";
+
+  renderScoreSubmitPanel();
 
   unlockOverlay.classList.remove("hidden");
 }
@@ -8259,22 +9659,38 @@ function endGame(){
   waveInProgress=false;
   raidMode=false;
   stopBattleBgm();
+  playSfx("game_over");
   life=0;
   lifeDisplay.textContent=life;
-  if(currentSpawnTimer){
-    clearInterval(currentSpawnTimer);
-    currentSpawnTimer=null;
-  }
+  clearWaveSpawnSchedule();
 
   // 결과 보기 전 통계 보존 — reset/reload는 다시하기에서만
   restartButton.style.display="none";
   plantButtons.forEach(button=>button.disabled=true);
   removeButton.disabled=true;
 
-  // 게임오버 결과 내용 준비 (클리어 보너스·최종점수 breakdown 없음)
+  // BOSS 진입 시 잔여 HP snapshot → 피해 보너스만 1회 반영
+  if(bossResultState.entered){
+    if(raidBoss&&typeof raidBoss.hp==="number"){
+      snapshotBossResultHp(raidBoss.hp);
+    }else if(!bossResultState.snapshotTaken){
+      snapshotBossResultHp(bossResultState.remainingHp);
+    }
+  }
+  const goScore=applyGameOverBossScore();
+  buildFinalResultData("gameover");
+
+  const bossScoreNote=
+    goScore&&goScore.bossEntered
+      ? `<p>보스 피해 보너스 <strong>+${goScore.bossDamageBonus.toLocaleString()}</strong>
+         (${Math.round((goScore.bossDamageRatio||0)*100)}%)</p>`
+      : "";
+
+  // 게임오버 결과 내용 준비 (클리어·시간·씨앗 보너스 없음)
   unlockTitle.textContent="💀 GAME OVER";
   unlockContent.innerHTML=`
     <p>방어선이 무너졌습니다.</p>
+    ${bossScoreNote}
     ${buildGameFeedbackHTML(false)}
   `;
   unlockNextButton.style.display="none";
@@ -8293,15 +9709,14 @@ function finishGame(){
   waveInProgress=false;
   raidMode=false;
   stopBattleBgm();
+  playSfx("game_clear");
   updatePauseUI();
 
-  // 기존 최종 클리어 보너스
-  score+=1000;
-
-  // RAID +3000과 최종 클리어 +1000이 반영된 뒤
-  // 시간/에너지 보너스를 계산한다.
+  // clear/time/energy/bossDamageBonus 는 breakdown에서 1회 합산 (flat +1000 선행 가산 없음)
   const finalResult=
     applyFinalClearScore();
+
+  buildFinalResultData("clear");
 
   scoreDisplay.textContent=score;
 
@@ -8324,11 +9739,6 @@ function finishGame(){
   unlockContent.innerHTML=`
     <p>
       Final Wave와 Raid Boss를 모두 격파했습니다!
-    </p>
-
-    <p>
-      RAID 클리어 보너스 +3000<br>
-      최종 클리어 보너스 +1000
     </p>
 
     ${scoreBreakdown}
@@ -8367,27 +9777,146 @@ function getPlantDisplayName(type){
   return type==="에너지식물"?"소리꽃":(type||"");
 }
 
+function formatOnePlantButton(button){
+  if(!button) return;
+  const type=button.dataset.plant||"";
+  const cost=button.dataset.cost||"";
+  const displayName=getPlantDisplayName(type);
+  const nameLen=displayName.length;
+  const lenClass=nameLen<=2?"name-len-2":nameLen===3?"name-len-3":"name-len-4";
+
+  button.innerHTML=
+    `<span class="plant-card-copy">`+
+      `<span class="plant-name-label ${lenClass}"><span class="plant-name-text">${displayName}</span></span>`+
+    `</span>`+
+    `<span class="plant-cost-label"><span class="plant-cost-text">${cost}</span></span>`;
+
+  button.dataset.sidebarFormatted="true";
+}
+
 function formatSidebarPlantButtons(){
-  plantButtons.forEach(button=>{
-    const type=button.dataset.plant||"";
-    const cost=button.dataset.cost||"";
-    const displayName=getPlantDisplayName(type);
-    const nameLen=displayName.length;
-    const lenClass=nameLen<=2?"name-len-2":nameLen===3?"name-len-3":"name-len-4";
-
-    button.innerHTML=
-      `<span class="plant-card-copy">`+
-        `<span class="plant-name-label ${lenClass}"><span class="plant-name-text">${displayName}</span></span>`+
-      `</span>`+
-      `<span class="plant-cost-label"><span class="plant-cost-text">${cost}</span></span>`;
-
-    button.dataset.sidebarFormatted="true";
-  });
-
+  plantButtons.forEach(button=>formatOnePlantButton(button));
   formatRemovePlantButton();
 }
 
+function ensureMostUsedPlantsSection(sidebar){
+  if(!sidebar) return null;
+
+  let section=sidebar.querySelector('.plant-accordion[data-accordion-id="most-used"]');
+  if(section) return section;
+
+  const legacy=sidebar.querySelector(".sidebar-most-used:not(.plant-accordion)");
+  if(legacy) legacy.remove();
+
+  section=document.createElement("div");
+  section.className="plant-group plant-accordion sidebar-most-used is-empty";
+  section.dataset.accordionId="most-used";
+  section.innerHTML=
+    `<button type="button" class="plant-accordion-header" aria-expanded="false">`+
+      `<span class="plant-accordion-icon" aria-hidden="true">⭐</span>`+
+      `<span class="plant-accordion-label">자주 배치한 식물</span>`+
+      `<span class="plant-accordion-chevron" aria-hidden="true"></span>`+
+    `</button>`+
+    `<div class="plant-group-buttons plant-accordion-body sidebar-most-used-body">`+
+      `<p class="sidebar-most-used-empty">아직 배치 기록이 없습니다</p>`+
+    `</div>`;
+
+  const energyGroup=sidebar.querySelector(".sidebar-energy-fixed, .energy-group");
+  const consonantGroup=sidebar.querySelector('.plant-accordion[data-accordion-id="consonant"], .consonant-group');
+  if(energyGroup&&energyGroup.parentElement===sidebar){
+    if(energyGroup.nextSibling) sidebar.insertBefore(section, energyGroup.nextSibling);
+    else sidebar.appendChild(section);
+  }else if(consonantGroup&&consonantGroup.parentElement===sidebar){
+    sidebar.insertBefore(section, consonantGroup);
+  }else{
+    sidebar.appendChild(section);
+  }
+
+  const header=section.querySelector(".plant-accordion-header");
+  if(header&&header.dataset.mostUsedBound!=="true"){
+    header.dataset.mostUsedBound="true";
+    header.addEventListener("click",()=>{
+      playSfx("click_ui");
+      cancelSidebarAccordionHover();
+      openSidebarAccordion("most-used");
+    });
+    header.addEventListener("pointerenter",(event)=>{
+      if(event.pointerType&&event.pointerType!=="mouse") return;
+      scheduleSidebarAccordionHover("most-used");
+    });
+    header.addEventListener("pointerleave",(event)=>{
+      if(event.pointerType&&event.pointerType!=="mouse") return;
+      cancelSidebarAccordionHover();
+    });
+  }
+
+  return section;
+}
+
+function updateMostUsedPlantsUI(){
+  const sidebar=document.querySelector(".battle-sidebar-left");
+  if(!sidebar) return;
+
+  const section=ensureMostUsedPlantsSection(sidebar);
+  if(!section) return;
+
+  const body=section.querySelector(".plant-accordion-body, .sidebar-most-used-body");
+  if(!body) return;
+
+  const top=getTopPlacedPlants(4);
+  const keepSelectedType=
+    lastPlantSelectSource==="most-used"&&selectedPlant
+      ? selectedPlant
+      : null;
+
+  body.replaceChildren();
+
+  if(!top.length){
+    const empty=document.createElement("p");
+    empty.className="sidebar-most-used-empty";
+    empty.textContent="아직 배치 기록이 없습니다";
+    body.appendChild(empty);
+    section.classList.add("is-empty");
+    return;
+  }
+
+  section.classList.remove("is-empty");
+
+  top.forEach(({type})=>{
+    const canonical=[...plantButtons].find(button=>button.dataset.plant===type);
+    const cost=canonical?.dataset.cost||String(PLANT_DB[type]?.cost??"");
+    const btn=document.createElement("button");
+    btn.type="button";
+    btn.className="plant-button most-used-plant-button";
+    if(CONSONANT_PLANTS.has(type)) btn.classList.add("most-used-consonant");
+    if(VOWEL_PLANTS.has(type)) btn.classList.add("most-used-vowel");
+    btn.dataset.plant=type;
+    btn.dataset.cost=String(cost);
+
+    if(canonical){
+      btn.disabled=canonical.disabled;
+      btn.classList.toggle("hidden-plant", canonical.classList.contains("hidden-plant"));
+      btn.classList.toggle("no-energy", canonical.classList.contains("no-energy"));
+    }else{
+      btn.disabled=true;
+      btn.classList.add("hidden-plant");
+    }
+
+    if(keepSelectedType===type&&!btn.disabled){
+      btn.classList.add("selected");
+    }
+
+    formatOnePlantButton(btn);
+    btn.addEventListener("click",()=>{
+      playSfx("click_ui");
+      selectPlantFromSidebar(type, btn);
+    });
+    body.appendChild(btn);
+  });
+}
+
 const SIDEBAR_ACCORDION_META={
+  mostUsed:{icon:"⭐", label:"자주 배치한 식물"},
   consonant:{icon:"🔵", label:"자음 · 공격"},
   vowel:{icon:"🟠", label:"모음 · 지원"}
 };
@@ -8411,7 +9940,7 @@ function scheduleSidebarAccordionHover(categoryId){
 }
 
 function openSidebarAccordion(categoryId){
-  if(categoryId!=="consonant"&&categoryId!=="vowel") return;
+  if(categoryId!=="consonant"&&categoryId!=="vowel"&&categoryId!=="most-used") return;
   const sidebar=document.querySelector(".battle-sidebar-left");
   if(!sidebar) return;
 
@@ -8425,9 +9954,13 @@ function openSidebarAccordion(categoryId){
 
 function openSidebarAccordionForPlant(plantType){
   if(!plantType||plantType==="에너지식물") return;
-  const button=document.querySelector(`.battle-sidebar .plant-button[data-plant="${plantType}"]`);
+  const button=
+    document.querySelector(
+      `.battle-sidebar .plant-accordion[data-accordion-id="consonant"] .plant-button[data-plant="${plantType}"],`+
+      `.battle-sidebar .plant-accordion[data-accordion-id="vowel"] .plant-button[data-plant="${plantType}"]`
+    )||[...plantButtons].find(btn=>btn.dataset.plant===plantType);
   const acc=button&&button.closest(".plant-accordion");
-  if(acc&&acc.dataset.accordionId){
+  if(acc&&acc.dataset.accordionId&&acc.dataset.accordionId!=="most-used"){
     openSidebarAccordion(acc.dataset.accordionId);
   }
 }
@@ -8606,7 +10139,10 @@ function setupBattleSideLayout(){
     const center=document.querySelector(".battle-center");
     ensureGameBoardViewport(center);
     placePlantInfoBelowBoard();
-    setupSidebarAccordion(document.querySelector(".battle-sidebar-left"));
+    const leftSidebar=document.querySelector(".battle-sidebar-left");
+    setupSidebarAccordion(leftSidebar);
+    ensureMostUsedPlantsSection(leftSidebar);
+    updateMostUsedPlantsUI();
     return;
   }
 
@@ -8670,6 +10206,8 @@ function setupBattleSideLayout(){
     );
   }
 
+  ensureMostUsedPlantsSection(left);
+
   if(consonantGroup){
     left.appendChild(
       consonantGroup
@@ -8703,6 +10241,7 @@ function setupBattleSideLayout(){
 
   formatSidebarPlantButtons();
   setupSidebarAccordion(left);
+  updateMostUsedPlantsUI();
   placePlantInfoBelowBoard();
 }
 
@@ -8956,22 +10495,27 @@ function injectVisualAssetStyles(){
     .zombie.frozen .zombie-image {
       filter: drop-shadow(0 3px 3px rgba(0,0,0,.22)) saturate(.72) brightness(1.18);
     }
-
-    .zombie.slowed .zombie-image {
-      opacity: .88;
-    }
   `;
 
   document.head.appendChild(style);
 }
 
 ensurePracticeModeUI();
-preloadGameImages();
-preloadSfx();
-preloadBattleBgm();
 initBgmAutoplayUnlock();
 injectVisualAssetStyles();
 initPauseControls();
 energyDisplay.textContent=energy;waveDisplay.textContent=currentWave;lifeDisplay.textContent=life;scoreDisplay.textContent=score;updatePlantButtons();setupBattleSideLayout();createBoard();mountBattleCanvas();initGameFitScale();
 console.info("[battle-overlay] word/HP DOM on #battle-overlay | canvas sprites ON | shared board coords (no TOP_PAD/fit double)");
 requestAnimationFrame(gameLoop);
+
+// 시작 화면 진입 전 핵심 asset 완료 대기 (튜토리얼/게임 자동 시작 없음)
+(async function bootCriticalPreload(){
+  try{
+    showBootLoadingOverlay();
+    await preloadCriticalAssets();
+  }catch(err){
+    console.warn("[preload] boot failed, opening start screen anyway", err);
+  }finally{
+    hideBootLoadingOverlay();
+  }
+})();

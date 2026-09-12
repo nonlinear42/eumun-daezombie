@@ -1351,25 +1351,9 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
 
 
 /* =========================================
-   후설모음 둔화
+   후설모음 둔화 — .zombie.slowed DOM class 경로 제거됨
+   (판정은 slowedUntil/slowMultiplier, 시각은 Canvas wave cue)
 ========================================= */
-
-.zombie.slowed {
-  opacity: 0.82;
-
-  filter:
-    saturate(0.65)
-    brightness(1.05);
-
-  outline:
-    2px solid
-    rgba(160,190,255,0.85);
-
-  box-shadow:
-    0 0 10px
-    rgba(160,190,255,0.65);
-}
-
 
 .slow-effect {
   font-size: 20px;
@@ -1655,37 +1639,8 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
 
 
 /* =========================================
-   4. 슬로우 중에도 글자는 선명하게
+   4. (legacy .zombie.slowed 라벨 CSS 제거됨)
 ========================================= */
-
-.game-board > .zombie.slowed {
-  opacity: 1;
-
-  filter:
-    saturate(0.7)
-    brightness(1.05);
-
-  outline:
-    2px solid
-    rgba(120,175,255,0.85);
-
-  box-shadow:
-    0 0 10px
-    rgba(120,175,255,0.6);
-}
-
-
-/* 단어 라벨 자체는 흐려지지 않게 */
-
-.game-board > .zombie.slowed > div:first-child {
-  opacity: 1;
-
-  background:
-    rgba(238,247,255,0.98);
-
-  border-color:
-    rgba(90,145,220,0.95);
-}
 
 
 /* =========================================
@@ -4256,33 +4211,8 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
 }
 
 /* =========================================
-   후설모음 둔화 - 네모 테두리 제거
+   후설모음 둔화 DOM class CSS 제거됨
    ========================================= */
-
-.game-board > .zombie.slowed {
-  opacity: 1 !important;
-
-  outline: none !important;
-  box-shadow: none !important;
-
-  filter: none !important;
-}
-
-
-/* 좀비 그림 자체에만 둔화 색감 적용 */
-.game-board > .zombie.slowed .zombie-image {
-  filter:
-    saturate(.78)
-    brightness(1.05)
-    drop-shadow(0 0 4px rgba(135,110,230,.75))
-    drop-shadow(0 0 9px rgba(80,190,210,.45)) !important;
-}
-
-
-/* 후설모음 상태 중 단어 라벨은 기존처럼 잘 보이게 */
-.game-board > .zombie.slowed > .zombie-word-label {
-  opacity: 1 !important;
-}
 
 /* =========================================
    음운 디펜스 v36 - 식물 발사 반동
@@ -4435,11 +4365,6 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
 .game-board > .zombie.zombie-bomber .zombie-walk {
   --zombie-walk-duration: 0.76s;
   animation-name: zombieWalkBomberV37;
-}
-
-/* 후설모음 둔화(이동속도 0.5배)와 같은 비율로 리듬만 늘린다 */
-.game-board > .zombie.slowed .zombie-walk {
-  animation-duration: calc(var(--zombie-walk-duration) * 2);
 }
 
 @keyframes zombieWalkNormalV37 {
@@ -7592,10 +7517,6 @@ body > h1 {
   opacity: 0.55;
 }
 
-.game-board > .zombie.slowed .zombie-walk::before {
-  opacity: 0.88;
-}
-
 .game-board > .zombie.zombie-dying .zombie-walk::before,
 .game-board > .zombie.zombie-dying-normal .zombie-walk::before,
 .game-board > .zombie.zombie-dying-bomber .zombie-walk::before {
@@ -9303,13 +9224,35 @@ body > h1 {
   }
 }
 
-/* HUD 단어 전환 pulse (유지) */
+/* HUD 단어 전환 pulse (유지) + 보스 머리 위 word label */
 #raid-hud-dock .raid-word.raid-word-switch-pulse,
-#raid-boss-hud .raid-word.raid-word-switch-pulse {
+#raid-boss-hud .raid-word.raid-word-switch-pulse,
+#raid-boss-body .raid-boss-word-label.raid-word-switch-pulse {
   animation: raidWordSwitchPulse 0.34s ease-out;
 }
 
+#raid-boss-body .raid-boss-word-label.raid-word-switch-pulse {
+  animation-name: raidBossWordLabelSwitchPulse;
+}
+
 @keyframes raidWordSwitchPulse {
+  0% {
+    transform: scale(1);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  40% {
+    transform: scale(1.08);
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 0 8px rgba(255, 200, 120, 0.45);
+  }
+  100% {
+    transform: scale(1);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+}
+
+@keyframes raidBossWordLabelSwitchPulse {
   0% {
     transform: scale(1);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -10796,7 +10739,9 @@ body {
 .unlock-card h2,
 #unlock-title,
 .unlock-plant-name,
-#tutorial-guide-title {
+#tutorial-guide-title,
+#global-cast-announce,
+#raid-boss-body .raid-boss-word-label {
   font-family: "SeoulNamsanGame", sans-serif !important;
   font-weight: 700 !important;
   font-stretch: normal !important;
@@ -11184,9 +11129,9 @@ body {
   z-index: 35 !important;
   width: 640px !important; /* 560 → ~14% 확대 */
   max-width: 640px !important;
-  height: 64px !important;
-  min-height: 64px !important;
-  max-height: 64px !important;
+  height: 74px !important;
+  min-height: 74px !important;
+  max-height: 74px !important;
   margin: 0 !important;
   padding: 9px 16px !important;
   box-sizing: border-box !important;
@@ -11300,9 +11245,11 @@ body {
   font-weight: 500 !important;
   line-height: 1.25 !important;
   color: rgba(232, 240, 255, 0.9) !important;
-  white-space: nowrap !important;
+  white-space: normal !important;
   overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
 }
 
 /* ---- RAID dock: 선택정보 바 아래(하늘), 건물·레인과 분리 ---- */
@@ -11479,9 +11426,11 @@ body {
 #game-scale-root .plant-info-desc {
   font-size: calc(13.5px * var(--readability-scale)) !important;
   line-height: 1.3 !important;
-  white-space: nowrap !important;
+  white-space: normal !important;
   overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
 }
 
 #game-scale-root .plant-info-details {
@@ -11684,7 +11633,7 @@ body {
   box-shadow: none !important;
   color: rgba(240, 248, 236, 0.95) !important;
   font-family: "SeoulNamsanGame", sans-serif !important;
-  font-size: 12px !important;
+  font-size: 13px !important;
   font-weight: 700 !important;
   line-height: 1.2 !important;
   text-align: left !important;
@@ -11793,7 +11742,7 @@ body {
   #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion-header {
     min-height: 30px !important;
     padding: 5px 7px !important;
-    font-size: 11.5px !important;
+    font-size: 12.5px !important;
   }
 
   #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion-body {
@@ -11881,9 +11830,13 @@ body {
   font-size: var(--sidebar-card-name-fs-long) !important;
 }
 
-#game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-card-copy {
+#game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-card-copy,
+.battle-sidebar .energy-group .plant-button .plant-card-copy {
+  left: 46% !important;
+  top: 32% !important;
   width: 42% !important;
   height: 26% !important;
+  transform: none !important;
 }
 
 #game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-name-label {
@@ -11907,8 +11860,8 @@ body {
 }
 
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion.is-open .plant-button .plant-cost-label {
-  /* 소리꽃(--card-cost-fs)과 동일 — 확대 금지 */
-  font-size: var(--card-cost-fs) !important;
+  /* 일반 카드만 base 12px — 소리꽃(--card-cost-fs 12.5) 불변 */
+  font-size: calc(12px * var(--readability-scale)) !important;
 }
 
 /* =========================================================
@@ -12030,6 +11983,12 @@ body {
   transform: none !important;
 }
 
+/* 소리꽃 이름 상단 glyph clip 완화 — line-height만 */
+#game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-name-text,
+.battle-sidebar .energy-group .plant-button .plant-name-text {
+  line-height: 1.15 !important;
+}
+
 #game-scale-root .battle-sidebar.sidebar-accordion .sidebar-energy-fixed .plant-cost-label {
   display: flex !important;
   align-items: center !important;
@@ -12089,10 +12048,9 @@ body {
 .battle-sidebar .consonant-group .plant-button .plant-cost-label,
 .battle-sidebar .vowel-group .plant-button .plant-cost-label {
   font-family: "SeoulNamsanGame", sans-serif !important;
-  font-size: var(--card-cost-fs) !important;
+  font-size: calc(12px * var(--readability-scale)) !important;
   font-weight: 900 !important;
   font-stretch: normal !important;
-  font-synthesis: none !important;
   letter-spacing: -0.15px !important;
   line-height: 1 !important;
   padding: 0 !important;
@@ -12110,8 +12068,8 @@ body {
 .battle-sidebar .consonant-group .plant-button .plant-cost-text,
 .battle-sidebar .vowel-group .plant-button .plant-cost-text {
   display: block !important;
-  font-family: inherit !important;
-  font-size: inherit !important;
+  font-family: Arial, sans-serif !important;
+  font-size: calc(12px * var(--readability-scale)) !important;
   font-weight: inherit !important;
   font-stretch: normal !important;
   letter-spacing: inherit !important;
@@ -12241,7 +12199,7 @@ body {
 #game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion .plant-button .plant-card-copy,
 .battle-sidebar .consonant-group .plant-button .plant-card-copy,
 .battle-sidebar .vowel-group .plant-button .plant-card-copy {
-  left: 71% !important;
+  left: 68% !important;
   top: 29.5% !important;
   width: 40% !important;
   height: 26% !important;
@@ -12314,10 +12272,9 @@ body {
   padding: 0 !important;
   box-sizing: border-box !important;
   font-family: "SeoulNamsanGame", sans-serif !important;
-  font-size: var(--card-cost-fs) !important;
+  font-size: calc(12px * var(--readability-scale)) !important;
   font-weight: 900 !important;
   font-stretch: normal !important;
-  font-synthesis: none !important;
   letter-spacing: -0.15px !important;
   line-height: 1 !important;
   overflow: hidden !important;
@@ -12330,8 +12287,8 @@ body {
   display: block !important;
   margin: 0 !important;
   padding: 0 !important;
-  font-family: inherit !important;
-  font-size: inherit !important;
+  font-family: Arial, sans-serif !important;
+  font-size: calc(12px * var(--readability-scale)) !important;
   font-weight: inherit !important;
   letter-spacing: inherit !important;
   line-height: 1 !important;
@@ -12339,4 +12296,461 @@ body {
   white-space: nowrap !important;
   transform: translateY(var(--sidebar-card-text-nudge-y, 0.5px)) !important;
   scale: none !important;
+}
+
+/* 모음 가격만 -0.5px (자음 0.5px / 소리꽃 불변) */
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion[data-accordion-id="vowel"] .plant-button .plant-cost-text,
+.battle-sidebar .vowel-group .plant-button .plant-cost-text {
+  transform: translateY(-1px) !important;
+}
+
+/* =========================================================
+   Boot preload loading screen (1차 프리로더)
+   game-scale-root / battle canvas 구조는 변경하지 않음
+   ========================================================= */
+.boot-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 252, 245, 0.95), rgba(232, 238, 230, 0.92) 55%, rgba(210, 222, 208, 0.94)),
+    #e4ece3;
+  font-family: "SeoulNamsanGame", sans-serif;
+}
+
+.boot-loading-overlay.hidden {
+  display: none !important;
+}
+
+.boot-loading-card {
+  width: min(420px, 86vw);
+  text-align: center;
+  padding: 28px 22px 24px;
+}
+
+.boot-loading-title {
+  margin: 0 0 10px;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #1f3d2a;
+}
+
+.boot-loading-stage {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  color: #355744;
+}
+
+.boot-loading-pct {
+  margin: 0 0 12px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #1a4d32;
+}
+
+.boot-loading-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(40, 80, 55, 0.15);
+  overflow: hidden;
+  margin: 0 auto 18px;
+  max-width: 320px;
+}
+
+.boot-loading-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3d8f5c, #6cbc7a);
+  transition: width 0.18s ease-out;
+}
+
+.boot-loading-tip {
+  margin: 0;
+  min-height: 2.6em;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: #4a6354;
+}
+
+body.boot-loading-active #start-credit,
+body.boot-loading-active #font-credit {
+  visibility: hidden;
+}
+
+/* =========================================================
+   후설/전설 발동 안내 — DOM 1개 (#global-cast-announce)
+   레인 바로 위 학교 배경 영역 · game-scale-root와 함께 scale
+   ========================================================= */
+.battle-scene > #global-cast-announce {
+  position: absolute;
+  left: var(--board-overlay-left);
+  top: var(--board-overlay-top);
+  width: 990px;
+  margin-top: -44px;
+  z-index: 8;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-align: center;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: rgba(248, 252, 255, 0.98);
+  text-shadow:
+    0 1px 0 rgba(18, 28, 44, 0.55),
+    0 0 1px rgba(18, 28, 44, 0.75);
+  opacity: 0;
+  transform: scale(0.94);
+  transition: opacity 0.16s ease-out, transform 0.16s ease-out;
+  will-change: opacity, transform;
+}
+
+.battle-scene > #global-cast-announce.is-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.battle-scene > #global-cast-announce.cast-kind-back {
+  color: rgba(232, 244, 255, 0.98);
+}
+
+.battle-scene > #global-cast-announce.cast-kind-front {
+  color: rgba(236, 250, 255, 0.98);
+}
+
+/* =========================================================
+   RAID BOSS — 머리 위 현재 단어 / 단어 변경 경고
+   공통 .raid-boss-word-chrome 로 묶고 top만 조정 (상대 stack 유지)
+   ========================================================= */
+#raid-boss-body {
+  overflow: visible !important;
+  --raid-boss-word-chrome-top: 72px;
+}
+
+#raid-boss-body > .raid-boss-word-chrome {
+  position: absolute;
+  left: 50%;
+  top: var(--raid-boss-word-chrome-top);
+  transform: translateX(-50%);
+  z-index: 22;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  max-width: none;
+  pointer-events: none;
+}
+
+#raid-boss-body .raid-boss-word-label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  max-width: none;
+  padding: 5px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 248, 0.97);
+  border: 1px solid rgba(74, 108, 52, 0.55);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65),
+    0 2px 4px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  pointer-events: none;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: 0;
+  color: #1a2e12;
+  -webkit-text-fill-color: #1a2e12;
+}
+
+/* warning은 chrome 높이(라벨) 바로 위 — 숨김 시에도 라벨 위치 고정 */
+#raid-boss-body .raid-boss-word-warning {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  visibility: hidden;
+  font-size: 22px !important;
+}
+
+#raid-boss-body .raid-boss-word-warning.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#raid-boss-body .raid-boss-word-warning.is-imminent {
+  animation: raidBossWordWarnPulse 0.5s ease-in-out infinite !important;
+}
+
+#raid-boss-body .raid-boss-word-warning.is-changed {
+  animation: raidBossWordChangedPop 0.45s cubic-bezier(.2,.8,.25,1) both !important;
+}
+
+@keyframes raidBossWordWarnPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: translateX(-50%) scale(1.05);
+  }
+}
+
+@keyframes raidBossWordChangedPop {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.55);
+  }
+  35% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.18);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+/* =========================================================
+   결과 화면 — 점수 제출 (Apps Script)
+   ========================================================= */
+.score-submit-panel {
+  margin: 14px 0 10px;
+  padding: 12px 10px 8px;
+  border-top: 1px solid rgba(60, 60, 60, 0.18);
+  text-align: center;
+}
+
+.score-submit-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #222;
+}
+
+.score-submit-name {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto 10px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  border: 2px solid rgba(60, 60, 60, 0.35);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111;
+  background: #fff;
+}
+
+.score-submit-name:focus {
+  outline: none;
+  border-color: rgba(40, 90, 160, 0.65);
+}
+
+.score-submit-button {
+  display: inline-block;
+  min-width: 140px;
+  margin: 0 auto;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  background: #2f6fed;
+  cursor: pointer;
+}
+
+.score-submit-button:hover:not(:disabled) {
+  background: #2458c4;
+}
+
+.score-submit-button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.score-submit-status {
+  min-height: 1.3em;
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #444;
+}
+
+.score-submit-status.is-pending {
+  color: #355;
+}
+
+.score-submit-status.is-success {
+  color: #1b6b3a;
+}
+
+.score-submit-status.is-error {
+  color: #a02828;
+}
+
+.score-submit-test-note {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #666;
+}
+
+/* =========================================================
+   자주 배치한 식물 TOP4 — 기존 plant-accordion 체계 재사용
+   (자음/모음 카드 geometry·spacing / 소리꽃 불변)
+   ========================================================= */
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion[data-accordion-id="most-used"] .sidebar-most-used-body {
+  align-content: start !important;
+}
+
+#game-scale-root .battle-sidebar.sidebar-accordion .plant-accordion[data-accordion-id="most-used"] .sidebar-most-used-empty {
+  grid-column: 1 / -1;
+  margin: 0 !important;
+  padding: 10px 8px !important;
+  color: rgba(220, 232, 214, 0.72) !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1.35 !important;
+  text-align: center !important;
+}
+
+.battle-sidebar .sidebar-most-used .most-used-consonant,
+.battle-sidebar .sidebar-most-used .most-used-consonant.selected,
+.battle-sidebar .plant-accordion[data-accordion-id="most-used"] .most-used-consonant,
+.battle-sidebar .plant-accordion[data-accordion-id="most-used"] .most-used-consonant.selected {
+  background:
+    transparent
+    url("images/ui/cards/card_consonant_attack.png")
+    center center / contain no-repeat !important;
+}
+
+.battle-sidebar .sidebar-most-used .most-used-vowel,
+.battle-sidebar .sidebar-most-used .most-used-vowel.selected,
+.battle-sidebar .plant-accordion[data-accordion-id="most-used"] .most-used-vowel,
+.battle-sidebar .plant-accordion[data-accordion-id="most-used"] .most-used-vowel.selected {
+  background:
+    transparent
+    url("images/ui/cards/card_vowel_support.png")
+    center center / contain no-repeat !important;
+}
+
+#game-scale-root .battle-sidebar .plant-accordion[data-accordion-id="most-used"] .plant-button .plant-card-copy,
+#game-scale-root .battle-sidebar .sidebar-most-used .plant-button .plant-card-copy {
+  left: 68% !important;
+  top: 29.5% !important;
+  width: 40% !important;
+  height: 26% !important;
+  transform: translateX(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+#game-scale-root .battle-sidebar .plant-accordion[data-accordion-id="most-used"] .plant-button .plant-cost-label,
+#game-scale-root .battle-sidebar .sidebar-most-used .plant-button .plant-cost-label {
+  left: 50% !important;
+  top: 63.5% !important;
+  width: 22% !important;
+  height: 16% !important;
+  transform: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  font-family: "SeoulNamsanGame", sans-serif !important;
+  font-size: calc(12px * var(--readability-scale)) !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.15px !important;
+  line-height: 1 !important;
+  overflow: hidden !important;
+}
+
+#game-scale-root .battle-sidebar .plant-accordion[data-accordion-id="most-used"] .plant-button .plant-cost-text,
+#game-scale-root .battle-sidebar .sidebar-most-used .plant-button .plant-cost-text {
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-family: Arial, sans-serif !important;
+  font-size: calc(12px * var(--readability-scale)) !important;
+  font-weight: inherit !important;
+  letter-spacing: inherit !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  transform: translateY(var(--sidebar-card-text-nudge-y, 0.5px)) !important;
+}
+
+#game-scale-root .battle-sidebar .plant-accordion[data-accordion-id="most-used"] .most-used-vowel .plant-cost-text,
+#game-scale-root .battle-sidebar .sidebar-most-used .most-used-vowel .plant-cost-text {
+  transform: translateY(-1px) !important;
+}
+
+/* TOP4 이름 상단 glyph clip 완화 — text만 lh, translate 유지 */
+#game-scale-root .battle-sidebar .plant-accordion[data-accordion-id="most-used"] .plant-name-text,
+#game-scale-root .battle-sidebar .sidebar-most-used .plant-name-text {
+  line-height: 1.15 !important;
+}
+
+/* =========================================================
+   Mobile / PWA 1차 — PC 무회귀
+   - pointer:coarse 전용 (마우스 PC 미적용)
+   - start 버튼 잘림: coarse AND 짧은 높이만
+   - safe-area: overlay만 (shell/root/battle 금지)
+   ========================================================= */
+
+@media (pointer: coarse) {
+  #start-overlay:not(.hidden),
+  #unlock-overlay:not(.hidden),
+  .end-illustration-overlay {
+    padding-top: max(12px, env(safe-area-inset-top, 0px)) !important;
+    padding-right: max(12px, env(safe-area-inset-right, 0px)) !important;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+    padding-left: max(12px, env(safe-area-inset-left, 0px)) !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (pointer: coarse) and (max-height: 700px) {
+  #start-overlay .unlock-card {
+    max-height: min(88dvh, 760px) !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #start-overlay .start-brand-logo {
+    max-height: 150px !important;
+  }
 }
