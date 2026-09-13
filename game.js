@@ -2718,7 +2718,7 @@ let finalResultData = null;
 let scoreSubmitInFlight = false;
 let scoreSubmitSucceeded = false;
 const SCORE_SUBMIT_URL =
-  "https://script.google.com/macros/s/AKfycbzOApkANKrxCqh0vcMnyxAVdTuRStRghBl_su3W4-SPNHe7iDUq-_Iu0A7mCFfPIvaa/exec";
+  "https://script.google.com/macros/s/AKfycbw5fsAr88njQZYzE61ueEXA3aU2OQox9PWKj9vzxFc4w1WqByMNuHXAbZRssXAMiPOt/exec";
 let currentWave = 1;
 let zombies = [];
 /** 일반 Wave 비행 투사체 (메인 gameLoop에서 일괄 갱신). RAID 투사체는 별도. */
