@@ -4513,7 +4513,16 @@ function createBoard(){
     const cell=document.createElement("div"); cell.classList.add("cell"); cell.dataset.index=i;
     cell.addEventListener("click",function(){
       if(gameOver||isPaused)return;
-      if(removeMode){if(cell.dataset.plant==="true") removePlantFromCell(cell,true);return;}
+      if(removeMode){
+        if(cell.dataset.plant==="true"){
+          removePlantFromCell(cell,true);
+        }else{
+          removeMode=false;
+          if(removeButton) removeButton.classList.remove("selected");
+          clearPlantInfoPanel();
+        }
+        return;
+      }
       if(!selectedPlant||cell.dataset.plant==="true")return;
       if(isTutorialGuideBlockingCell(cell))return;
       if(!practiceMode&&energy<selectedCost)return;
