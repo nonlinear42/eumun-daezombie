@@ -3803,6 +3803,11 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   box-shadow: none !important;
 }
 
+.plant-exit-ghost,
+.plant-exit-ghost * {
+  pointer-events: none !important;
+}
+
 /* HP 경고/지원효과가 퇴장 복제본에 남지 않게 방어 */
 .plant-exit-ghost::before,
 .plant-exit-ghost::after {

@@ -628,7 +628,7 @@ const RAID_CONFIG = {
   // 보스 이동 / 근접 공격
   startX: BOARD_WIDTH - 120,
   defeatX: 0,
-  moveSpeed: 3.75,
+  moveSpeed: 3.65,
   biteDamage: 70,
   biteInterval: 1000,
   pathRow: 2
@@ -7208,10 +7208,18 @@ function performRaidPlantAttack(row,column,data){
         damageRaidBoss(data.damage);
 
         if(raidBoss&&raidBoss.alive){
-          raidBoss.dotEndTime=nowGame()+data.special.duration*1000;
-          raidBoss.dotNextTick=nowGame()+data.special.tickInterval*1000;
-          raidBoss.dotTickInterval=data.special.tickInterval*1000;
+          const nowDot=nowGame();
+          const durationMs=data.special.duration*1000;
+          const tickMs=data.special.tickInterval*1000;
+          const wasActive=raidBoss.dotEndTime>nowDot;
+
+          // 재적중: 지속만 연장. 진행 중 tick은 뒤로 밀지 않음.
+          raidBoss.dotEndTime=nowDot+durationMs;
+          raidBoss.dotTickInterval=tickMs;
           raidBoss.dotDamage=data.special.tickDamage;
+          if(!wasActive){
+            raidBoss.dotNextTick=nowDot+tickMs;
+          }
         }
       });
       break;
@@ -7261,7 +7269,13 @@ function performRaidPlantAttack(row,column,data){
             if(!raidBoss||!raidBoss.alive)return;
             const pos=getRaidHitVfxPosition(row);
             createProjectileHitVfx(plantType,pos.x,pos.y,{duration:400});
-            damageRaidBoss(data.damage,"heavy-number");
+            // 후음 BOSS 전용: PLANT_DB(140) 유지, RAID 명중만 +15 → 155
+            // (요청 문구의 120→135와 동일 절대량; 현재 DB는 140)
+            const sniperDamage=
+              data.feature==="후음"
+                ? 155
+                : data.damage;
+            damageRaidBoss(sniperDamage,"heavy-number");
           },
           {size:44,scale:1.03}
         );
@@ -7281,8 +7295,14 @@ function performRaidPlantAttack(row,column,data){
           {duration:data.attackType==="heavy"?380:280}
         );
 
+        // 파열음 BOSS 전용 ×1.10 (다른 heavy 미적용)
+        const hitDamage=
+          data.feature==="파열음"
+            ? Math.round(data.damage*1.10)
+            : data.damage;
+
         damageRaidBoss(
-          data.damage,
+          hitDamage,
           data.attackType==="heavy"?"heavy-number":""
         );
       });
@@ -10037,6 +10057,58 @@ function ensureMostUsedPlantsSection(sidebar){
   return section;
 }
 
+let mostUsedTopSignature="";
+
+function getMostUsedTopSignature(top){
+  if(!top||!top.length) return "";
+  return top.map(entry=>entry.type).join("|");
+}
+
+function syncMostUsedPlantButtonStates(body,section,top){
+  if(!body) return;
+  const keepSelectedType=
+    lastPlantSelectSource==="most-used"&&selectedPlant
+      ? selectedPlant
+      : null;
+  if(!top.length){
+    if(section) section.classList.add("is-empty");
+    return;
+  }
+  if(section) section.classList.remove("is-empty");
+
+  body.querySelectorAll(".most-used-plant-button").forEach((btn,index)=>{
+    const type=btn.dataset.plant||(top[index]&&top[index].type)||"";
+    const canonical=[...plantButtons].find(button=>button.dataset.plant===type);
+    if(canonical){
+      btn.disabled=canonical.disabled;
+      btn.classList.toggle("hidden-plant", canonical.classList.contains("hidden-plant"));
+      btn.classList.toggle("no-energy", canonical.classList.contains("no-energy"));
+    }else{
+      btn.disabled=true;
+      btn.classList.add("hidden-plant");
+      btn.classList.add("no-energy");
+    }
+    btn.classList.toggle(
+      "selected",
+      !!(keepSelectedType===type&&!btn.disabled)
+    );
+  });
+}
+
+function mostUsedBodyMatchesTop(body,top){
+  if(!body) return false;
+  if(!top.length){
+    return !!body.querySelector(".sidebar-most-used-empty")&&
+      !body.querySelector(".most-used-plant-button");
+  }
+  const buttons=body.querySelectorAll(".most-used-plant-button");
+  if(buttons.length!==top.length) return false;
+  for(let i=0;i<top.length;i++){
+    if(buttons[i].dataset.plant!==top[i].type) return false;
+  }
+  return true;
+}
+
 function updateMostUsedPlantsUI(){
   const sidebar=document.querySelector(".battle-sidebar-left");
   if(!sidebar) return;
@@ -10048,11 +10120,22 @@ function updateMostUsedPlantsUI(){
   if(!body) return;
 
   const top=getTopPlacedPlants(4);
+  const signature=getMostUsedTopSignature(top);
   const keepSelectedType=
     lastPlantSelectSource==="most-used"&&selectedPlant
       ? selectedPlant
       : null;
 
+  // top4 종류·순서가 같고 DOM도 일치하면 구조 rebuild 없이 energy/disabled만 sync
+  if(
+    signature===mostUsedTopSignature&&
+    mostUsedBodyMatchesTop(body,top)
+  ){
+    syncMostUsedPlantButtonStates(body,section,top);
+    return;
+  }
+
+  mostUsedTopSignature=signature;
   body.replaceChildren();
 
   if(!top.length){
