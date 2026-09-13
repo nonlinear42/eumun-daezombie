@@ -309,6 +309,7 @@ body:has(#start-overlay:not(.hidden)) .page-brand-cluster {
   position: relative;
 
   overflow: visible;
+  touch-action: none;
 }
 
 
