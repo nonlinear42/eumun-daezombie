@@ -628,7 +628,7 @@ const RAID_CONFIG = {
   // 보스 이동 / 근접 공격
   startX: BOARD_WIDTH - 120,
   defeatX: 0,
-  moveSpeed: 3.65,
+  moveSpeed: 3.60,
   biteDamage: 70,
   biteInterval: 1000,
   pathRow: 2
@@ -3051,15 +3051,15 @@ const WAVE_CONFIG = {
   5:{zombieCount:20,zombieHP:400,spawnInterval:2200},
   6:{zombieCount:22,zombieHP:480,spawnInterval:2100},
   7:{zombieCount:26,zombieHP:560,spawnInterval:2000},
-  8:{zombieCount:28,zombieHP:650,spawnInterval:1900},
-  9:{zombieCount:34,zombieHP:620,spawnInterval:1350}
+  8:{zombieCount:30,zombieHP:650,spawnInterval:1900},
+  9:{zombieCount:36,zombieHP:620,spawnInterval:1350}
 };
 
 const WAVE_ENEMY_MIX = {
   1:{normal:10}, 2:{normal:13}, 3:{normal:16}, 4:{normal:18}, 5:{normal:20}, 6:{normal:22},
   7:{normal:16,runner:3,breaker:2,resilient:2,bomber:3},
-  8:{normal:14,runner:4,breaker:3,resilient:3,bomber:4},
-  9:{normal:15,runner:5,breaker:4,resilient:4,bomber:6}
+  8:{normal:14,runner:6,breaker:3,resilient:3,bomber:4},
+  9:{normal:15,runner:7,breaker:4,resilient:4,bomber:6}
 };
 let waveEnemyTypeBag = [];
 
