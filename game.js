@@ -2632,7 +2632,7 @@ if(startCreditPrefix && startAuthorTrigger){
 }
 
 const MOBILE_THANKS_EASTER_EGG_MQ =
-  "(pointer: coarse) and (hover: none)";
+  "(pointer: coarse) and (hover: none) and (max-width: 1024px)";
 
 function isMobileThanksEasterEgg(){
   try{
@@ -2729,7 +2729,7 @@ let waveZombieCount = 0;
 let resolvedZombies = 0;
 let waveInProgress = false;
 let gameOver = false;
-/** 결과창 상태: null | "clear" | "gameover" */
+/** 결과창 상태: null | "clear" | "gameover" | "quit" */
 let resultScreenMode = null;
 let currentSpawnTimer = null;
 /** Wave 첫 spawn을 startWave 클릭 턴과 분리하기 위한 rAF 핸들 */
@@ -2890,6 +2890,21 @@ function canPauseGame(){
   return !!(waveInProgress || raidMode || tutorialMode);
 }
 
+function canShowPauseFinishButton(){
+  // 본게임만. 튜토리얼 / 연습 / TEST·Admin 제출 경로에서는 숨김.
+  if(gameOver) return false;
+  if(tutorialMode||practiceMode||scoreSubmissionTestMode) return false;
+  return true;
+}
+
+function updatePauseFinishButtonUI(){
+  const finishButton=document.getElementById("pause-finish-button");
+  if(!finishButton) return;
+  const show=canShowPauseFinishButton();
+  finishButton.hidden=!show;
+  finishButton.setAttribute("aria-hidden", show?"false":"true");
+}
+
 function updatePauseUI(){
   if(!pauseButton){
     pauseButton=document.getElementById("pause-button");
@@ -2928,6 +2943,8 @@ function updatePauseUI(){
       pauseOverlay.setAttribute("aria-hidden","true");
     }
   }
+
+  updatePauseFinishButtonUI();
 }
 
 function setGamePaused(paused){
@@ -2985,6 +3002,18 @@ function initPauseControls(){
     resumeButton.addEventListener("click",()=>{
       playSfx("click_ui");
       setGamePaused(false);
+    });
+  }
+  const finishFromPauseButton=document.getElementById("pause-finish-button");
+  if(finishFromPauseButton){
+    finishFromPauseButton.addEventListener("click",()=>{
+      playSfx("click_ui");
+      if(!canShowPauseFinishButton()) return;
+      const ok=window.confirm(
+        "현재 플레이를 종료하고\n여기까지의 결과를 기록할까요?"
+      );
+      if(!ok) return;
+      earlyFinishFromPause();
     });
   }
   const restartFromPauseButton=document.getElementById("pause-restart-button");
@@ -8416,8 +8445,15 @@ function buildFinalResultData(resultType){
     Math.floor((nowGame()-gameStartTime)/1000)
   );
 
+  const normalizedResult=
+    resultType==="clear"
+      ?"clear"
+      :resultType==="quit"
+        ?"quit"
+        :"gameover";
+
   finalResultData={
-    result:resultType==="clear"?"clear":"gameover",
+    result:normalizedResult,
     finalScore:score,
     reachedWave:currentWave,
     kills:killCount,
@@ -9749,12 +9785,12 @@ function removeEndIllustrationOverlay(){
 }
 
 /**
- * 클리어/게임오버 공통 결과창 (#unlock-overlay) 표시.
- * mode: "clear" | "gameover"
- * 점수·통계는 endGame/finishGame에서 이미 채워 둔 내용을 재사용한다.
+ * 클리어/게임오버/중도종료 공통 결과창 (#unlock-overlay) 표시.
+ * mode: "clear" | "gameover" | "quit"
+ * 점수·통계는 endGame/finishGame/earlyFinishFromPause에서 이미 채워 둔 내용을 재사용한다.
  */
 function showResultScreen(mode){
-  if(mode!=="clear"&&mode!=="gameover")return;
+  if(mode!=="clear"&&mode!=="gameover"&&mode!=="quit")return;
 
   resultScreenMode=mode;
   removeEndIllustrationOverlay();
@@ -9904,6 +9940,55 @@ function endGame(){
   updatePauseUI();
   showGameOverIllustration();
 }
+
+/** 일시정지 → 수업 종료용 중도 기록. gameover 점수 규칙 재사용, illustration 없음. */
+function earlyFinishFromPause(){
+  if(gameOver) return;
+  if(tutorialMode||practiceMode||scoreSubmissionTestMode) return;
+
+  forceUnpauseGame();
+  gameOver=true;
+  resultScreenMode=null;
+  waveInProgress=false;
+  raidMode=false;
+  stopBattleBgm();
+  clearWaveSpawnSchedule();
+
+  restartButton.style.display="none";
+  plantButtons.forEach(button=>button.disabled=true);
+  removeButton.disabled=true;
+
+  if(bossResultState.entered){
+    if(raidBoss&&typeof raidBoss.hp==="number"){
+      snapshotBossResultHp(raidBoss.hp);
+    }else if(!bossResultState.snapshotTaken){
+      snapshotBossResultHp(bossResultState.remainingHp);
+    }
+  }
+
+  const goScore=applyGameOverBossScore();
+  buildFinalResultData("quit");
+
+  const bossScoreNote=
+    goScore&&goScore.bossEntered
+      ? `<p>보스 피해 보너스 <strong>+${goScore.bossDamageBonus.toLocaleString()}</strong>
+         (${Math.round((goScore.bossDamageRatio||0)*100)}%)</p>`
+      : "";
+
+  unlockTitle.textContent="여기까지의 결과";
+  unlockContent.innerHTML=`
+    <p>현재까지의 플레이 결과를 기록합니다.</p>
+    ${bossScoreNote}
+    ${buildGameFeedbackHTML(false)}
+  `;
+  unlockNextButton.style.display="none";
+  delete unlockNextButton.dataset.action;
+  delete unlockNextButton.dataset.wave;
+
+  updatePauseUI();
+  showResultScreen("quit");
+}
+
 function finishGame(){
   if(gameOver)return;
 

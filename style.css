@@ -5634,11 +5634,12 @@ body > h1 {
   filter: brightness(1.05);
 }
 
-/* 터치 모바일 Thanks 전용:
+/* 터치 모바일/태블릿 Thanks 전용 (터치 PC·노트북 제외):
    - global Thanks 버튼 숨김
    - 우측 하단 "정희재" 이스터에그 탭
-   - Thanks panel 가독성 (기본 .thanks-panel 규칙 뒤에 두어 cascade 보장) */
-@media (pointer: coarse) and (hover: none) {
+   - Thanks panel 가독성 (기본 .thanks-panel 규칙 뒤에 두어 cascade 보장)
+   max-width:1024px — 폰/태블릿만; 넓은 터치 노트북은 Thanks 버튼 유지 */
+@media (pointer: coarse) and (hover: none) and (max-width: 1024px) {
   #global-thanks-button.global-thanks-button {
     display: none !important;
   }
