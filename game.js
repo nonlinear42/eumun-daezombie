@@ -5,7 +5,7 @@
 // 특수 적 4종 + Wave 9 Final + RAID 통합 버전 / v23 전투 리액션 강화
 // ============================================
 
-const GAME_VERSION = "v1.1.212";
+const GAME_VERSION = "1.4.212";
 const GAME_AUTHOR = "정희재";
 
 const CELL_SIZE = 90;
