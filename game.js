@@ -5,7 +5,7 @@
 // 특수 적 4종 + Wave 9 Final + RAID 통합 버전 / v23 전투 리액션 강화
 // ============================================
 
-const GAME_VERSION = "v1.0.212";
+const GAME_VERSION = "v1.1.212";
 const GAME_AUTHOR = "정희재";
 
 const CELL_SIZE = 90;
@@ -2447,11 +2447,19 @@ function startBootLoadingTipTimer(){
   clearBootLoadingTipTimer();
   const tipEl=document.getElementById("boot-loading-tip");
   if(!tipEl) return;
-  let tipIndex=0;
-  tipEl.textContent=BOOT_LOADING_TIPS[0];
+  const tips=BOOT_LOADING_TIPS;
+  if(!tips.length) return;
+  if(tips.length===1){
+    tipEl.textContent=tips[0];
+    return;
+  }
+  let tipIndex=Math.floor(Math.random()*tips.length);
+  tipEl.textContent=tips[tipIndex];
   bootLoadingTipTimer=setInterval(()=>{
-    tipIndex=(tipIndex+1)%BOOT_LOADING_TIPS.length;
-    tipEl.textContent=BOOT_LOADING_TIPS[tipIndex];
+    let next=Math.floor(Math.random()*(tips.length-1));
+    if(next>=tipIndex) next+=1;
+    tipIndex=next;
+    tipEl.textContent=tips[tipIndex];
   },2500);
 }
 
@@ -3225,10 +3233,62 @@ function refillRaidWordBag(){
     [raidWordBag[0],raidWordBag[1]]=[raidWordBag[1],raidWordBag[0]];
   }
 }
+
+/** BOSS 다음 단어 overlap용 — 직접 공격 자음 feature만 (getWordFeatures 교육 규칙 불변) */
+const RAID_ATTACK_FEATURE_SET=new Set([
+  "양순음","치조음","비음","파열음","유음",
+  "마찰음","연구개음","파찰음","경구개음","후음"
+]);
+function getRaidAttackFeatures(wordData){
+  const all=getWordFeatures(wordData);
+  if(!all||!all.length) return [];
+  const out=[];
+  for(let i=0;i<all.length;i++){
+    if(RAID_ATTACK_FEATURE_SET.has(all[i])) out.push(all[i]);
+  }
+  return out;
+}
+
 function getNextRaidWord(){
   if(raidWordBag.length===0) refillRaidWordBag();
   if(raidWordBag.length===0) return null;
-  const wordData=raidWordBag.shift();
+
+  let wordData=null;
+  const prevWord=
+    raidBoss&&raidBoss.wordData
+      ?raidBoss.wordData
+      :null;
+
+  // 첫 BOSS 단어(이전 없음) 또는 후보 1개 → 기존 bag front 소비
+  if(!prevWord||raidWordBag.length===1){
+    wordData=raidWordBag.shift();
+  }else{
+    const prevSet=new Set(getRaidAttackFeatures(prevWord));
+    let minOverlap=Infinity;
+    const bestIndices=[];
+
+    for(let i=0;i<raidWordBag.length;i++){
+      const feats=getRaidAttackFeatures(raidWordBag[i]);
+      let overlap=0;
+      for(let j=0;j<feats.length;j++){
+        if(prevSet.has(feats[j])) overlap++;
+      }
+      if(overlap<minOverlap){
+        minOverlap=overlap;
+        bestIndices.length=0;
+        bestIndices.push(i);
+      }else if(overlap===minOverlap){
+        bestIndices.push(i);
+      }
+    }
+
+    const pick=
+      bestIndices[
+        Math.floor(Math.random()*bestIndices.length)
+      ];
+    wordData=raidWordBag.splice(pick,1)[0];
+  }
+
   raidLastWordId=wordData.id;
   return wordData;
 }
