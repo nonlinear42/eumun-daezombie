@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <base target="_top">
+
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: Arial, "Noto Sans KR", sans-serif;
+      background: #f5f5f5;
+      color: #222;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #777;
+      margin-bottom: 24px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #ddd;
+    }
+
+    .tab.active {
+      background: #333;
+      color: white;
+    }
+
+    #classSelector {
+      display: none;
+      margin-bottom: 16px;
+    }
+
+    #classSelector.show {
+      display: block;
+    }
+
+    select {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: white;
+    }
+
+    .ranking-box {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      background: #eeeeee;
+      padding: 14px;
+    }
+
+    td {
+      padding: 14px;
+      border-top: 1px solid #eee;
+      text-align: center;
+    }
+
+    td.name {
+      text-align: left;
+    }
+
+    .loading,
+    .empty {
+      padding: 40px;
+      text-align: center;
+      color: #777;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 12px;
+      }
+
+      h1 {
+        font-size: 25px;
+      }
+
+      td,
+      th {
+        padding: 11px 6px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>음운대좀비 순위표</h1>
+
+  <div class="subtitle">
+    학생별 최고점수를 기준으로 집계합니다.
+  </div>
+
+  <div class="tabs">
+
+    <button
+      id="allButton"
+      class="tab active"
+      onclick="showAll()">
+      전체 순위표
+    </button>
+
+    <button
+      id="classButton"
+      class="tab"
+      onclick="showClass()">
+      학급별 순위표
+    </button>
+
+  </div>
+
+  <div id="classSelector">
+
+    <select
+      id="classSelect"
+      onchange="renderClass()">
+
+      <option value="301">3학년 1반</option>
+      <option value="302">3학년 2반</option>
+      <option value="303">3학년 3반</option>
+      <option value="304">3학년 4반</option>
+      <option value="305">3학년 5반</option>
+      <option value="306">3학년 6반</option>
+      <option value="307">3학년 7반</option>
+      <option value="308">3학년 8반</option>
+      <option value="309">3학년 9반</option>
+      <option value="310">3학년 10반</option>
+      <option value="311">3학년 11반</option>
+
+    </select>
+
+  </div>
+
+  <div class="ranking-box">
+
+    <div
+      id="loading"
+      class="loading">
+      순위표를 불러오는 중...
+    </div>
+
+    <table
+      id="rankingTable"
+      style="display:none;">
+
+      <thead>
+        <tr>
+          <th>순위</th>
+          <th>학번 + 이름</th>
+          <th>최고점수</th>
+        </tr>
+      </thead>
+
+      <tbody id="rankingBody">
+      </tbody>
+
+    </table>
+
+    <div
+      id="empty"
+      class="empty"
+      style="display:none;">
+      아직 기록이 없습니다.
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+
+  let rankingData = [];
+
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+
+      rankingData = data || [];
+
+      document
+        .getElementById("loading")
+        .style.display = "none";
+
+      showAll();
+
+    })
+    .withFailureHandler(function(error) {
+
+      document
+        .getElementById("loading")
+        .textContent =
+          "순위표를 불러오지 못했습니다.";
+
+      console.error(error);
+
+    })
+    .getRankingData();
+
+
+  function calculateRanks(rows) {
+
+    const sorted =
+      [...rows].sort(
+        (a, b) => b.score - a.score
+      );
+
+    let previousScore = null;
+    let currentRank = 0;
+
+    return sorted.map(
+      function(row, index) {
+
+        if (row.score !== previousScore) {
+
+          currentRank = index + 1;
+          previousScore = row.score;
+
+        }
+
+        return {
+          classCode: row.classCode,
+          name: row.name,
+          score: row.score,
+          rank: currentRank
+        };
+
+      }
+    );
+
+  }
+
+
+  function render(rows) {
+
+    const table =
+      document.getElementById(
+        "rankingTable"
+      );
+
+    const body =
+      document.getElementById(
+        "rankingBody"
+      );
+
+    const empty =
+      document.getElementById(
+        "empty"
+      );
+
+    body.innerHTML = "";
+
+    const ranked =
+      calculateRanks(rows);
+
+
+    if (ranked.length === 0) {
+
+      table.style.display = "none";
+      empty.style.display = "block";
+
+      return;
+
+    }
+
+
+    empty.style.display = "none";
+    table.style.display = "table";
+
+
+    ranked.forEach(function(row) {
+
+      const tr =
+        document.createElement("tr");
+
+
+      const rank =
+        document.createElement("td");
+
+      rank.textContent = row.rank;
+
+
+      const name =
+        document.createElement("td");
+
+      name.className = "name";
+      name.textContent = row.name;
+
+
+      const score =
+        document.createElement("td");
+
+      score.textContent =
+        Number(row.score)
+          .toLocaleString();
+
+
+      tr.appendChild(rank);
+      tr.appendChild(name);
+      tr.appendChild(score);
+
+      body.appendChild(tr);
+
+    });
+
+  }
+
+
+  function showAll() {
+
+    document
+      .getElementById("allButton")
+      .classList.add("active");
+
+    document
+      .getElementById("classButton")
+      .classList.remove("active");
+
+    document
+      .getElementById("classSelector")
+      .classList.remove("show");
+
+    render(rankingData);
+
+  }
+
+
+  function showClass() {
+
+    document
+      .getElementById("classButton")
+      .classList.add("active");
+
+    document
+      .getElementById("allButton")
+      .classList.remove("active");
+
+    document
+      .getElementById("classSelector")
+      .classList.add("show");
+
+    renderClass();
+
+  }
+
+
+  function renderClass() {
+
+    const code =
+      document
+        .getElementById("classSelect")
+        .value;
+
+    const filtered =
+      rankingData.filter(
+        function(row) {
+          return row.classCode === code;
+        }
+      );
+
+    render(filtered);
+
+  }
+
+</script>
+
+</body>
+</html>
