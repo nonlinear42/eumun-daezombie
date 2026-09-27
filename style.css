@@ -11232,6 +11232,31 @@ body {
   background: transparent !important;
 }
 
+/* 게임 UI 전체: 네이티브 텍스트 선택/드래그 시작 방지 (입력 필드는 예외) */
+#game-scale-root {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#game-scale-root input,
+#game-scale-root textarea,
+#game-scale-root [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#unlock-overlay {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#unlock-overlay input,
+#unlock-overlay textarea,
+#unlock-overlay [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* ---- 전투 씬: 루트 전체를 학교 배경으로 ---- */
 #game-scale-root .battle-layout {
   position: absolute !important;

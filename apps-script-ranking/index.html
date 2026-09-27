@@ -3,6 +3,7 @@
 <head>
   <base target="_top">
 
+  <meta charset="UTF-8">
   <meta name="viewport"
         content="width=device-width, initial-scale=1">
 
@@ -11,117 +12,1007 @@
       box-sizing: border-box;
     }
 
+    :root {
+      --green-900: #24461f;
+      --green-700: #37702f;
+      --green-600: #44883a;
+      --green-500: #5aa84b;
+      --green-100: #e9f6df;
+      --green-50: #f5fbef;
+      --yellow-400: #ffd257;
+      --yellow-200: #ffeaa6;
+      --cream: #fff9ea;
+      --text: #263325;
+      --text-soft: #5f6f5c;
+      --line: #e6eee0;
+      --gold: #f5b82e;
+      --silver: #a9b6c4;
+      --bronze: #d98e52;
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --shadow-card: 0 10px 28px rgba(52, 82, 38, 0.12);
+    }
+
+    html,
+    body {
+      overflow-x: hidden;
+    }
+
     body {
       margin: 0;
       padding: 24px;
-      font-family: Arial, "Noto Sans KR", sans-serif;
-      background: #f5f5f5;
-      color: #222;
+      font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", Arial, sans-serif;
+      color: var(--text);
+      background: #bfe39a;
+      min-height: 100vh;
     }
 
-    .container {
-      max-width: 800px;
+    /* 메인 배경 이미지 (스크롤해도 화면에 고정) */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background: #bfe39a url("https://nonlinear42.github.io/eumun-daezombie/apps-script-ranking/assets/ranking-bg.png") center center / cover no-repeat;
+      pointer-events: none;
+    }
+
+    .page {
+      position: relative;
+      max-width: 1480px;
       margin: 0 auto;
     }
 
-    h1 {
+    /* ---------- 히어로 ---------- */
+
+    .hero {
+      position: relative;
+      z-index: 1;
+      max-width: 880px;
+      margin: 0 auto 10px;
       text-align: center;
-      margin-bottom: 8px;
     }
 
-    .subtitle {
-      text-align: center;
-      color: #777;
-      margin-bottom: 24px;
+    .hero-title {
+      margin: 0;
+      line-height: 0;
     }
+
+    .hero-title-img {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 2172 / 724;
+      filter: drop-shadow(0 6px 14px rgba(36, 70, 31, 0.25));
+    }
+
+    /* ---------- 본문 레이아웃 ---------- */
+
+    .board-layout {
+      position: relative;
+    }
+
+    .board-column {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 1040px;
+      min-width: 0;
+      margin: 0 auto;
+      padding: 20px;
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.62);
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+      box-shadow: 0 12px 36px rgba(36, 70, 31, 0.18);
+    }
+
+    /* 좌우 장식 일러스트: 화면 좌우 가장자리에 고정, 랭킹 보드 뒤쪽에 위치 (바깥쪽 일부는 화면 밖으로 잘림) */
+    .side-illustration {
+      position: fixed;
+      bottom: clamp(40px, 8vh, 110px);
+      z-index: 0;
+      width: clamp(300px, calc((100vw - 1040px) / 2 + 220px), 430px);
+      pointer-events: none;
+    }
+
+    .side-illustration.left {
+      left: 0;
+      transform: translateX(-14%);
+    }
+
+    .side-illustration.right {
+      right: 0;
+      transform: translateX(14%);
+    }
+
+    .side-illustration-slot img {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1086 / 1448;
+      filter: drop-shadow(0 8px 18px rgba(36, 70, 31, 0.18));
+    }
+
+    /* ---------- 탭 ---------- */
 
     .tabs {
       display: flex;
-      gap: 10px;
+      gap: 6px;
       margin-bottom: 16px;
+      padding: 6px;
+      border-radius: 999px;
+      background: #ffffff;
+      box-shadow: 0 4px 14px rgba(52, 82, 38, 0.1);
+      border: 2px solid var(--green-100);
     }
 
     .tab {
       flex: 1;
-      padding: 14px;
+      min-height: 50px;
+      padding: 12px 16px;
       border: none;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: bold;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text-soft);
+      background: transparent;
       cursor: pointer;
-      background: #ddd;
+      transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+      word-break: keep-all;
+    }
+
+    .tab:hover {
+      background: var(--green-50);
+      color: var(--green-700);
+    }
+
+    .tab:focus-visible {
+      outline: 3px solid var(--yellow-400);
+      outline-offset: 2px;
     }
 
     .tab.active {
-      background: #333;
-      color: white;
+      background: linear-gradient(180deg, #6cbf58 0%, var(--green-600) 100%);
+      color: #ffffff;
+      box-shadow: 0 4px 0 var(--green-700), 0 6px 12px rgba(55, 112, 47, 0.3);
+      transform: translateY(-2px);
     }
+
+    /* ---------- 학급 선택 ---------- */
 
     #classSelector {
       display: none;
       margin-bottom: 16px;
+      padding: 14px 16px;
+      border-radius: var(--radius-md);
+      background: #ffffff;
+      box-shadow: 0 4px 14px rgba(52, 82, 38, 0.08);
+      border: 2px solid var(--green-100);
     }
 
     #classSelector.show {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .class-label {
+      flex: 0 0 auto;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--green-700);
+    }
+
+    .select-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .select-wrap::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: 18px;
+      width: 10px;
+      height: 10px;
+      margin-top: -7px;
+      border-right: 3px solid var(--green-600);
+      border-bottom: 3px solid var(--green-600);
+      transform: rotate(45deg);
+      pointer-events: none;
     }
 
     select {
       width: 100%;
-      padding: 12px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      background: white;
+      min-height: 48px;
+      padding: 10px 44px 10px 16px;
+      font-family: inherit;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      border-radius: 12px;
+      border: 2px solid #cfe5c0;
+      background: var(--green-50);
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
     }
 
-    .ranking-box {
-      background: white;
+    select:focus {
+      outline: 3px solid var(--yellow-400);
+      outline-offset: 1px;
+      border-color: var(--green-500);
+    }
+
+    /* ---------- 내 순위 검색 ---------- */
+
+    .ranking-search {
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      border-radius: var(--radius-md);
+      background: #ffffff;
+      box-shadow: 0 4px 14px rgba(52, 82, 38, 0.08);
+      border: 2px solid var(--green-100);
+    }
+
+    .search-form {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+    }
+
+    .search-input-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .search-input {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 46px 10px 16px;
+      font-family: inherit;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
       border-radius: 12px;
+      border: 2px solid #cfe5c0;
+      background: var(--green-50);
+    }
+
+    .search-input::placeholder {
+      color: #8a9a86;
+      font-weight: 600;
+    }
+
+    .search-input:focus {
+      outline: 3px solid var(--yellow-400);
+      outline-offset: 1px;
+      border-color: var(--green-500);
+      background: #ffffff;
+    }
+
+    .search-clear {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      margin-top: -16px;
+      padding: 0;
+      border: none;
+      border-radius: 50%;
+      font-family: inherit;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--text-soft);
+      background: var(--green-100);
+      cursor: pointer;
+    }
+
+    .search-clear.show {
+      display: inline-flex;
+    }
+
+    .search-clear:hover {
+      color: var(--green-900);
+      background: #d6ecc7;
+    }
+
+    .search-clear:focus-visible,
+    .search-button:focus-visible {
+      outline: 3px solid var(--yellow-400);
+      outline-offset: 2px;
+    }
+
+    .search-button {
+      flex: 0 0 auto;
+      min-width: 84px;
+      min-height: 48px;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 17px;
+      font-weight: 800;
+      color: #ffffff;
+      background: linear-gradient(180deg, #6cbf58 0%, var(--green-600) 100%);
+      box-shadow: 0 4px 0 var(--green-700), 0 6px 12px rgba(55, 112, 47, 0.25);
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+
+    .search-button:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 var(--green-700), 0 2px 6px rgba(55, 112, 47, 0.25);
+    }
+
+    .search-results {
+      display: none;
+      margin-top: 14px;
+    }
+
+    .search-results.show {
+      display: block;
+    }
+
+    .search-results-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+      color: var(--green-700);
+      font-weight: 800;
+    }
+
+    .search-results-title {
+      font-size: 16px;
+    }
+
+    .search-results-scope {
+      font-size: 13px;
+      color: var(--text-soft);
+      white-space: nowrap;
+    }
+
+    .search-result-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 332px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .search-result-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 14px;
+      border: 2px solid #cfe5c0;
+      border-left-width: 6px;
+      background: var(--green-50);
+    }
+
+    .search-result-card.rank-1 {
+      border-color: var(--gold);
+      background: #fff8dc;
+    }
+
+    .search-result-card.rank-2 {
+      border-color: var(--silver);
+      background: #f4f7fa;
+    }
+
+    .search-result-card.rank-3 {
+      border-color: var(--bronze);
+      background: #fdf2e8;
+    }
+
+    .search-result-card .rank-badge {
+      min-width: 40px;
+      height: 40px;
+      background: #ffffff;
+      box-shadow: 0 3px 0 #cfe5c0;
+    }
+
+    .search-result-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .search-result-label {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--green-700);
+    }
+
+    .search-result-name {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text);
+      overflow-wrap: anywhere;
+      word-break: keep-all;
+    }
+
+    .search-result-score {
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 2px solid var(--line);
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--green-900);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .search-empty {
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--green-50);
+      text-align: center;
+      color: var(--text-soft);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    /* ---------- 랭킹 보드 ---------- */
+
+    .ranking-box {
+      background: #ffffff;
+      border-radius: var(--radius-lg);
       overflow: hidden;
-      box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+      box-shadow: var(--shadow-card);
+      border: 3px solid #ffffff;
+      outline: 2px solid var(--green-100);
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
+      table-layout: fixed;
     }
 
     th {
-      background: #eeeeee;
-      padding: 14px;
+      padding: 15px 14px;
+      background: var(--green-100);
+      color: var(--green-700);
+      font-size: 15px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    th.col-rank {
+      width: 90px;
+    }
+
+    th.col-name {
+      text-align: left;
+    }
+
+    th.col-score {
+      width: 150px;
+      text-align: right;
+      padding-right: 24px;
     }
 
     td {
-      padding: 14px;
-      border-top: 1px solid #eee;
+      padding: 13px 14px;
+      border-top: 1px solid var(--line);
       text-align: center;
+      font-size: 17px;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #fbfdf8;
+    }
+
+    td.rank {
+      padding-top: 10px;
+      padding-bottom: 10px;
+    }
+
+    .rank-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 36px;
+      height: 36px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--green-50);
+      color: var(--green-700);
+      font-size: 16px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
     }
 
     td.name {
       text-align: left;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
+    }
+
+    td.score {
+      text-align: right;
+      padding-right: 24px;
+      font-weight: 800;
+      color: var(--green-900);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    /* 1~3위 강조 */
+    tbody tr.rank-1 {
+      background: #fff8dc;
+    }
+
+    tbody tr.rank-2 {
+      background: #f4f7fa;
+    }
+
+    tbody tr.rank-3 {
+      background: #fdf2e8;
+    }
+
+    tr.rank-1 .rank-badge,
+    .search-result-card.rank-1 .rank-badge {
+      background: var(--gold);
+      color: #ffffff;
+      box-shadow: 0 3px 0 #d39516;
+    }
+
+    tr.rank-2 .rank-badge,
+    .search-result-card.rank-2 .rank-badge {
+      background: var(--silver);
+      color: #ffffff;
+      box-shadow: 0 3px 0 #8795a4;
+    }
+
+    tr.rank-3 .rank-badge,
+    .search-result-card.rank-3 .rank-badge {
+      background: var(--bronze);
+      color: #ffffff;
+      box-shadow: 0 3px 0 #b36d36;
+    }
+
+    tr.rank-1 td.name,
+    tr.rank-1 td.score {
+      font-size: 18px;
     }
 
     .loading,
     .empty {
-      padding: 40px;
+      padding: 48px 20px;
       text-align: center;
-      color: #777;
+      color: var(--text-soft);
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .loading-spinner {
+      display: block;
+      width: 34px;
+      height: 34px;
+      margin: 0 auto 14px;
+      border-radius: 50%;
+      border: 4px solid var(--green-100);
+      border-top-color: var(--green-500);
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ---------- TOP 3 포디엄 (전체 순위표 전용) ---------- */
+
+    .podium {
+      position: relative;
+      display: none;
+      margin-bottom: 18px;
+      padding: 18px 24px 22px;
+      border-radius: var(--radius-lg);
+      background:
+        radial-gradient(ellipse at 50% 55%, rgba(255, 224, 138, 0.35), transparent 65%),
+        linear-gradient(180deg, rgba(255, 251, 238, 0.94) 0%, rgba(242, 249, 230, 0.94) 100%);
+      box-shadow: var(--shadow-card);
+      border: 3px solid #ffffff;
+      outline: 2px solid var(--green-100);
+      overflow: hidden;
+    }
+
+    .podium.show {
+      display: block;
+    }
+
+    .podium-title {
+      position: relative;
+      z-index: 2;
+      margin: 0;
+      text-align: center;
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--green-700);
+      letter-spacing: 0.02em;
+    }
+
+    .podium-stage {
+      position: relative;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* 포디엄 이미지: 위아래 투명 여백은 음수 margin으로 잘라냄 (값은 이미지 폭 기준 %).
+       아래 margin이 이름 카드가 받침대 아래 끝에 겹치는 정도를 결정 */
+    .podium-art {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1672 / 941;
+      margin: -9% 0 calc(-9% - 14px);
+      pointer-events: none;
+    }
+
+    /* 열 비율 = 이미지 속 2위·1위·3위 받침대의 가로 위치 */
+    .podium-cards {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 8fr 25fr 1fr 32fr 1.5fr 25fr 7.5fr;
+      align-items: start;
+    }
+
+    .podium-item {
+      --podium-light: #d9f0c9;
+      --podium-color: var(--green-500);
+      --podium-dark: var(--green-700);
+      --podium-soft: var(--green-50);
+      grid-row: 1;
+      justify-self: center;
+      width: 92%;
+      min-width: 0;
+    }
+
+    .podium-item.first {
+      --podium-light: #ffe08a;
+      --podium-color: var(--gold);
+      --podium-dark: #d39516;
+      --podium-soft: #fff6d6;
+      grid-column: 4;
+    }
+
+    .podium-item.second {
+      --podium-light: #e6ecf2;
+      --podium-color: #b7c3d0;
+      --podium-dark: #8795a4;
+      --podium-soft: #f2f5f9;
+      grid-column: 2;
+    }
+
+    .podium-item.third {
+      --podium-light: #f6cda9;
+      --podium-color: #e09a62;
+      --podium-dark: #b36d36;
+      --podium-soft: #fcefe3;
+      grid-column: 6;
+    }
+
+    .podium-item.is-empty {
+      visibility: hidden;
+    }
+
+    .podium-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 10px 12px;
+      border: 3px solid var(--podium-color);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, var(--podium-soft) 100%);
+      box-shadow: 0 4px 0 var(--podium-dark), 0 8px 16px rgba(0, 0, 0, 0.12);
+      text-align: center;
+    }
+
+    .podium-item.first .podium-card {
+      padding: 12px 12px 14px;
+      border-width: 4px;
+    }
+
+    .podium-rank-label {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--podium-dark);
+    }
+
+    .podium-names {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .podium-name {
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.35;
+      color: var(--text);
+      overflow-wrap: anywhere;
+      word-break: keep-all;
+    }
+
+    .podium-item.first .podium-name {
+      font-size: 19px;
+    }
+
+    .podium-more {
+      margin-top: 2px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-soft);
+    }
+
+    .podium-score {
+      padding: 4px 14px;
+      border-radius: 999px;
+      border: 2px solid var(--podium-light);
+      background: #ffffff;
+      color: var(--green-900);
+      font-size: 20px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .podium-item.first .podium-score {
+      font-size: 24px;
+    }
+
+    .page-footer {
+      margin-top: 22px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-soft);
+    }
+
+    /* ---------- 반응형 ---------- */
+
+    @media (max-width: 1180px) {
+      .side-illustration {
+        display: none;
+      }
+    }
+
+    @media (max-width: 800px) {
+      .podium {
+        padding: 16px 16px 20px;
+      }
+
+      .podium-card,
+      .podium-item.first .podium-card {
+        padding: 8px 6px 10px;
+        border-width: 2px;
+      }
+
+      .podium-rank-label {
+        font-size: 13px;
+      }
+
+      .podium-name,
+      .podium-item.first .podium-name {
+        font-size: 14px;
+      }
+
+      .podium-more {
+        font-size: 12px;
+      }
+
+      .podium-score,
+      .podium-item.first .podium-score {
+        padding: 2px 8px;
+        font-size: 15px;
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+
+      .hero {
+        margin-bottom: 6px;
+      }
+
+      .board-column {
+        padding: 12px;
+        border-radius: 22px;
+      }
     }
 
     @media (max-width: 600px) {
       body {
+        padding: 10px;
+      }
+
+      .tab {
+        min-height: 46px;
+        padding: 10px 8px;
+        font-size: 16px;
+      }
+
+      #classSelector.show {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+
+      .board-column {
+        padding: 8px;
+        border-radius: 18px;
+      }
+
+      .podium {
+        padding: 12px 10px 12px;
+      }
+
+      .podium-title {
+        font-size: 18px;
+      }
+
+      .podium-art {
+        margin-bottom: -9%;
+      }
+
+      .podium-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 4px;
+      }
+
+      .podium-item {
+        width: 100%;
+      }
+
+      .podium-item.first {
+        order: 1;
+      }
+
+      .podium-item.second {
+        order: 2;
+      }
+
+      .podium-item.third {
+        order: 3;
+      }
+
+      .podium-item.is-empty {
+        display: none;
+      }
+
+      .podium-card,
+      .podium-item.first .podium-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 2px 10px;
+        padding: 10px 12px;
+        border: 2px solid var(--podium-color);
+        border-left-width: 6px;
+        border-radius: 14px;
+        text-align: left;
+        background: var(--podium-soft);
+        box-shadow: none;
+      }
+
+      .podium-rank-label {
+        grid-column: 1;
+        font-size: 13px;
+      }
+
+      .podium-names {
+        grid-column: 1;
+      }
+
+      .podium-name,
+      .podium-item.first .podium-name {
+        font-size: 16px;
+      }
+
+      .podium-score,
+      .podium-item.first .podium-score {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        padding: 4px 10px;
+        background: #ffffff;
+        font-size: 17px;
+      }
+
+      th {
+        padding: 12px 6px;
+        font-size: 14px;
+      }
+
+      th.col-rank {
+        width: 58px;
+      }
+
+      th.col-score {
+        width: 96px;
+        padding-right: 12px;
+      }
+
+      td {
+        padding: 11px 6px;
+        font-size: 15px;
+      }
+
+      td.score {
+        padding-right: 12px;
+      }
+
+      .rank-badge {
+        min-width: 30px;
+        height: 30px;
+        font-size: 14px;
+      }
+
+      tr.rank-1 td.name,
+      tr.rank-1 td.score {
+        font-size: 16px;
+      }
+
+      .ranking-search {
         padding: 12px;
       }
 
-      h1 {
-        font-size: 25px;
+      .search-form {
+        gap: 8px;
       }
 
-      td,
-      th {
-        padding: 11px 6px;
-        font-size: 14px;
+      .search-input {
+        padding-left: 12px;
+        font-size: 16px;
+      }
+
+      .search-button {
+        min-width: 64px;
+        padding: 10px 12px;
+        font-size: 16px;
+      }
+
+      .search-result-card {
+        gap: 10px;
+        padding: 10px;
+      }
+
+      .search-result-card .rank-badge {
+        min-width: 34px;
+        height: 34px;
+      }
+
+      .search-result-name {
+        font-size: 15px;
+      }
+
+      .search-result-score {
+        padding: 3px 8px;
+        font-size: 15px;
       }
     }
   </style>
@@ -129,85 +1020,214 @@
 
 <body>
 
-<div class="container">
+<div class="page">
 
-  <h1>음운대좀비 순위표</h1>
+  <header class="hero">
 
-  <div class="subtitle">
-    학생별 최고점수를 기준으로 집계합니다.
-  </div>
+    <h1 class="hero-title">
+      <img
+        class="hero-title-img"
+        src="https://nonlinear42.github.io/eumun-daezombie/apps-script-ranking/assets/ranking-title.png"
+        alt="음운대좀비 순위표 - 최고 점수를 향해 도전해 보세요!">
+    </h1>
 
-  <div class="tabs">
+  </header>
 
-    <button
-      id="allButton"
-      class="tab active"
-      onclick="showAll()">
-      전체 순위표
-    </button>
+  <div class="board-layout">
 
-    <button
-      id="classButton"
-      class="tab"
-      onclick="showClass()">
-      학급별 순위표
-    </button>
+    <aside class="side-illustration left" aria-hidden="true">
+      <div id="sideIllustrationLeft" class="side-illustration-slot">
+        <img
+          src="https://nonlinear42.github.io/eumun-daezombie/apps-script-ranking/assets/ranking-side-left.png"
+          alt="">
+      </div>
+    </aside>
 
-  </div>
+    <main class="board-column">
 
-  <div id="classSelector">
+      <div class="tabs">
 
-    <select
-      id="classSelect"
-      onchange="renderClass()">
+        <button
+          id="allButton"
+          class="tab active"
+          onclick="showAll()">
+          전체 순위표
+        </button>
 
-      <option value="301">3학년 1반</option>
-      <option value="302">3학년 2반</option>
-      <option value="303">3학년 3반</option>
-      <option value="304">3학년 4반</option>
-      <option value="305">3학년 5반</option>
-      <option value="306">3학년 6반</option>
-      <option value="307">3학년 7반</option>
-      <option value="308">3학년 8반</option>
-      <option value="309">3학년 9반</option>
-      <option value="310">3학년 10반</option>
-      <option value="311">3학년 11반</option>
+        <button
+          id="classButton"
+          class="tab"
+          onclick="showClass()">
+          학급별 순위표
+        </button>
 
-    </select>
+      </div>
 
-  </div>
+      <div id="classSelector">
 
-  <div class="ranking-box">
+        <label class="class-label" for="classSelect">학급 선택</label>
 
-    <div
-      id="loading"
-      class="loading">
-      순위표를 불러오는 중...
-    </div>
+        <div class="select-wrap">
 
-    <table
-      id="rankingTable"
-      style="display:none;">
+          <select
+            id="classSelect"
+            onchange="renderClass()">
 
-      <thead>
-        <tr>
-          <th>순위</th>
-          <th>학번 + 이름</th>
-          <th>최고점수</th>
-        </tr>
-      </thead>
+            <option value="301">3학년 1반</option>
+            <option value="302">3학년 2반</option>
+            <option value="303">3학년 3반</option>
+            <option value="304">3학년 4반</option>
+            <option value="305">3학년 5반</option>
+            <option value="306">3학년 6반</option>
+            <option value="307">3학년 7반</option>
+            <option value="308">3학년 8반</option>
+            <option value="309">3학년 9반</option>
+            <option value="310">3학년 10반</option>
+            <option value="311">3학년 11반</option>
 
-      <tbody id="rankingBody">
-      </tbody>
+          </select>
 
-    </table>
+        </div>
 
-    <div
-      id="empty"
-      class="empty"
-      style="display:none;">
-      아직 기록이 없습니다.
-    </div>
+      </div>
+
+      <section class="ranking-search" aria-label="내 순위 검색">
+
+        <form
+          class="search-form"
+          role="search"
+          onsubmit="searchRanking(); return false;">
+
+          <div class="search-input-wrap">
+
+            <input
+              id="searchInput"
+              class="search-input"
+              type="text"
+              placeholder="학번 또는 이름을 검색하세요"
+              aria-label="학번 또는 이름 검색"
+              autocomplete="off"
+              enterkeyhint="search"
+              oninput="onRankingSearchInput()">
+
+            <button
+              id="searchClear"
+              class="search-clear"
+              type="button"
+              aria-label="검색어 지우기"
+              onclick="clearRankingSearch()">
+              &times;
+            </button>
+
+          </div>
+
+          <button class="search-button" type="submit">검색</button>
+
+        </form>
+
+        <div id="searchResults" class="search-results" aria-live="polite">
+
+          <div class="search-results-head">
+            <span class="search-results-title">내 순위</span>
+            <span id="searchScope" class="search-results-scope"></span>
+          </div>
+
+          <div id="searchResultList" class="search-result-list"></div>
+
+        </div>
+
+      </section>
+
+      <section id="podium" class="podium" aria-label="전체 TOP 3">
+
+        <h2 class="podium-title">전체 TOP 3</h2>
+
+        <div class="podium-stage">
+
+          <img
+            class="podium-art"
+            src="https://nonlinear42.github.io/eumun-daezombie/apps-script-ranking/assets/ranking-podium.png"
+            alt=""
+            aria-hidden="true">
+
+          <div class="podium-cards">
+
+            <div id="podiumSecond" class="podium-item second">
+              <div class="podium-card">
+                <span class="podium-rank-label"></span>
+                <div class="podium-names"></div>
+                <span class="podium-score"></span>
+              </div>
+            </div>
+
+            <div id="podiumFirst" class="podium-item first">
+              <div class="podium-card">
+                <span class="podium-rank-label"></span>
+                <div class="podium-names"></div>
+                <span class="podium-score"></span>
+              </div>
+            </div>
+
+            <div id="podiumThird" class="podium-item third">
+              <div class="podium-card">
+                <span class="podium-rank-label"></span>
+                <div class="podium-names"></div>
+                <span class="podium-score"></span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <div class="ranking-box">
+
+        <div
+          id="loading"
+          class="loading">
+          <span class="loading-spinner" aria-hidden="true"></span>
+          순위표를 불러오는 중...
+        </div>
+
+        <table
+          id="rankingTable"
+          style="display:none;">
+
+          <thead>
+            <tr>
+              <th class="col-rank">순위</th>
+              <th class="col-name">학번 + 이름</th>
+              <th class="col-score">최고점수</th>
+            </tr>
+          </thead>
+
+          <tbody id="rankingBody">
+          </tbody>
+
+        </table>
+
+        <div
+          id="empty"
+          class="empty"
+          style="display:none;">
+          아직 기록이 없습니다.
+        </div>
+
+      </div>
+
+      <p class="page-footer">학생별 최고점수를 기준으로 집계합니다.</p>
+
+    </main>
+
+    <aside class="side-illustration right" aria-hidden="true">
+      <div id="sideIllustrationRight" class="side-illustration-slot">
+        <img
+          src="https://nonlinear42.github.io/eumun-daezombie/apps-script-ranking/assets/ranking-side-right.png"
+          alt="">
+      </div>
+    </aside>
 
   </div>
 
@@ -319,11 +1339,23 @@
       const tr =
         document.createElement("tr");
 
+      if (row.rank <= 3) {
+        tr.className = "rank-" + row.rank;
+      }
+
 
       const rank =
         document.createElement("td");
 
-      rank.textContent = row.rank;
+      rank.className = "rank";
+
+      const rankBadge =
+        document.createElement("span");
+
+      rankBadge.className = "rank-badge";
+      rankBadge.textContent = row.rank;
+
+      rank.appendChild(rankBadge);
 
 
       const name =
@@ -336,6 +1368,7 @@
       const score =
         document.createElement("td");
 
+      score.className = "score";
       score.textContent =
         Number(row.score)
           .toLocaleString();
@@ -348,6 +1381,121 @@
       body.appendChild(tr);
 
     });
+
+  }
+
+
+  const PODIUM_MAX_NAMES = 2;
+
+  const PODIUM_PLACES = [
+    { rank: 1, id: "podiumFirst" },
+    { rank: 2, id: "podiumSecond" },
+    { rank: 3, id: "podiumThird" }
+  ];
+
+
+  function renderPodium(rows) {
+
+    const podium =
+      document.getElementById(
+        "podium"
+      );
+
+    const ranked =
+      calculateRanks(rows);
+
+
+    if (ranked.length === 0) {
+
+      podium.classList.remove("show");
+
+      return;
+
+    }
+
+
+    PODIUM_PLACES.forEach(function(place) {
+
+      const item =
+        document.getElementById(place.id);
+
+      const label =
+        item.querySelector(".podium-rank-label");
+
+      const names =
+        item.querySelector(".podium-names");
+
+      const score =
+        item.querySelector(".podium-score");
+
+      const winners =
+        ranked.filter(
+          function(row) {
+            return row.rank === place.rank;
+          }
+        );
+
+      names.innerHTML = "";
+
+
+      if (winners.length === 0) {
+
+        item.classList.add("is-empty");
+        label.textContent = "";
+        score.textContent = "";
+
+        return;
+
+      }
+
+
+      item.classList.remove("is-empty");
+
+      label.textContent =
+        winners.length > 1
+          ? "공동 " + place.rank + "위"
+          : place.rank + "위";
+
+
+      winners
+        .slice(0, PODIUM_MAX_NAMES)
+        .forEach(function(row) {
+
+          const name =
+            document.createElement("div");
+
+          name.className = "podium-name";
+          name.textContent = row.name;
+
+          names.appendChild(name);
+
+        });
+
+
+      if (winners.length > PODIUM_MAX_NAMES) {
+
+        const more =
+          document.createElement("div");
+
+        more.className = "podium-more";
+        more.textContent =
+          "외 " +
+          (winners.length - PODIUM_MAX_NAMES) +
+          "명";
+
+        names.appendChild(more);
+
+      }
+
+
+      score.textContent =
+        Number(winners[0].score)
+          .toLocaleString();
+
+    });
+
+
+    podium.classList.add("show");
 
   }
 
@@ -368,6 +1516,10 @@
 
     render(rankingData);
 
+    renderPodium(rankingData);
+
+    searchRanking();
+
   }
 
 
@@ -384,6 +1536,10 @@
     document
       .getElementById("classSelector")
       .classList.add("show");
+
+    document
+      .getElementById("podium")
+      .classList.remove("show");
 
     renderClass();
 
@@ -405,6 +1561,233 @@
       );
 
     render(filtered);
+
+    searchRanking();
+
+  }
+
+
+  function normalizeSearchText(text) {
+
+    let value =
+      String(text == null ? "" : text);
+
+    if (typeof value.normalize === "function") {
+      value = value.normalize("NFC");
+    }
+
+    return value
+      .replace(/\s+/g, "")
+      .toLowerCase();
+
+  }
+
+
+  function isClassView() {
+
+    return document
+      .getElementById("classButton")
+      .classList.contains("active");
+
+  }
+
+
+  function getCurrentScopeRows() {
+
+    if (!isClassView()) {
+      return rankingData;
+    }
+
+    const code =
+      document
+        .getElementById("classSelect")
+        .value;
+
+    return rankingData.filter(
+      function(row) {
+        return row.classCode === code;
+      }
+    );
+
+  }
+
+
+  function getCurrentScopeLabel() {
+
+    if (!isClassView()) {
+      return "전체 순위 기준";
+    }
+
+    const select =
+      document.getElementById("classSelect");
+
+    const option =
+      select.options[select.selectedIndex];
+
+    return (option ? option.text : select.value) + " 기준";
+
+  }
+
+
+  function searchRanking() {
+
+    const results =
+      document.getElementById("searchResults");
+
+    const list =
+      document.getElementById("searchResultList");
+
+    const scope =
+      document.getElementById("searchScope");
+
+    const query =
+      normalizeSearchText(
+        document.getElementById("searchInput").value
+      );
+
+    list.innerHTML = "";
+
+
+    if (!query) {
+
+      results.classList.remove("show");
+
+      return;
+
+    }
+
+
+    const ranked =
+      calculateRanks(getCurrentScopeRows());
+
+    const rankCounts = {};
+
+    ranked.forEach(function(row) {
+      rankCounts[row.rank] = (rankCounts[row.rank] || 0) + 1;
+    });
+
+    const matches =
+      ranked.filter(
+        function(row) {
+          return normalizeSearchText(row.name).indexOf(query) !== -1;
+        }
+      );
+
+
+    scope.textContent =
+      getCurrentScopeLabel() +
+      (matches.length > 0 ? " · " + matches.length + "명" : "");
+
+
+    if (matches.length === 0) {
+
+      const empty =
+        document.createElement("div");
+
+      empty.className = "search-empty";
+      empty.textContent = "검색 결과가 없습니다.";
+
+      list.appendChild(empty);
+
+    }
+
+
+    matches.forEach(function(row) {
+
+      const card =
+        document.createElement("div");
+
+      card.className = "search-result-card";
+
+      if (row.rank <= 3) {
+        card.classList.add("rank-" + row.rank);
+      }
+
+
+      const badge =
+        document.createElement("span");
+
+      badge.className = "rank-badge";
+      badge.textContent = row.rank;
+
+
+      const info =
+        document.createElement("div");
+
+      info.className = "search-result-info";
+
+      const label =
+        document.createElement("span");
+
+      label.className = "search-result-label";
+      label.textContent =
+        rankCounts[row.rank] > 1
+          ? "공동 " + row.rank + "위"
+          : row.rank + "위";
+
+      const name =
+        document.createElement("span");
+
+      name.className = "search-result-name";
+      name.textContent = row.name;
+
+      info.appendChild(label);
+      info.appendChild(name);
+
+
+      const score =
+        document.createElement("span");
+
+      score.className = "search-result-score";
+      score.textContent =
+        Number(row.score)
+          .toLocaleString();
+
+
+      card.appendChild(badge);
+      card.appendChild(info);
+      card.appendChild(score);
+
+      list.appendChild(card);
+
+    });
+
+
+    results.classList.add("show");
+
+  }
+
+
+  function onRankingSearchInput() {
+
+    const input =
+      document.getElementById("searchInput");
+
+    document
+      .getElementById("searchClear")
+      .classList.toggle("show", input.value.length > 0);
+
+    if (!normalizeSearchText(input.value)) {
+      searchRanking();
+    }
+
+  }
+
+
+  function clearRankingSearch() {
+
+    const input =
+      document.getElementById("searchInput");
+
+    input.value = "";
+
+    document
+      .getElementById("searchClear")
+      .classList.remove("show");
+
+    searchRanking();
+
+    input.focus();
 
   }
 
